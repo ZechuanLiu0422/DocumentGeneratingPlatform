@@ -50,14 +50,20 @@ class AIClient:
 
         prompt = self._build_prompt(doc_type, recipient, content)
 
-        # 如果有附件，添加附件信息到prompt
-        if attachments and len(attachments) > 0:
-            prompt += f"\n\n本文档包含{len(attachments)}个附件："
-            for i, att in enumerate(attachments):
-                prompt += f"\n附件{i+1}：{att}"
-            prompt += "\n\n请在正文中适当位置引用这些附件，引用格式为'（见附件1）'、'（见附件2）'等，不要写出附件名称。"
+        # 统一添加行文规范
+        prompt += """
 
-        prompt += f"\n\n另外，请根据上述内容拟定一个规范的{doc_type_names.get(doc_type, '公文')}标题。标题应简洁明确，符合公文标题格式要求。\n\n请按以下格式输出（第一行是标题，第二行空行，第三行开始是正文）：\n标题内容\n\n正文内容"
+【行文规范】
+根据主送机关判断层级（省>市>区县），用恰当语气。称谓：主送用"贵X"、发文用"我X"，自然融入正文，勿写"贵委："格式。"""
+
+        # 如果有附件，添加附件信息
+        if attachments and len(attachments) > 0:
+            prompt += f"\n\n附件{len(attachments)}个："
+            for i, att in enumerate(attachments):
+                prompt += f"\n{i+1}.{att}"
+            prompt += "\n正文中自然插入'（见附件X）'，位置在相关句末或段末。"
+
+        prompt += f"\n\n请根据上述内容拟定规范的{doc_type_names.get(doc_type, '公文')}标题。\n\n请按以下格式输出（第一行是标题，第二行空行，第三行开始是正文）：\n标题内容\n\n正文内容"
 
         if self.provider == 'claude':
             result = self._call_claude(prompt)
@@ -89,152 +95,64 @@ class AIClient:
     def _build_prompt(self, doc_type, recipient, content):
         """构建针对不同公文类型的 prompt"""
         prompts = {
-            'notice': f"""你是资深公文写作专家，精通 GB/T 9704-2012 标准。
+            'notice': f"""资深公文写作专家，精通GB/T 9704-2012。
 
-任务：将自然语言转换为规范的通知正文。
+任务：将"{content}"转为规范通知正文（主送：{recipient}）
 
-主送机关：{recipient}
-用户内容：{content}
+【行文规范】
+根据"{recipient}"判断层级（省>市>区县），用恰当语气。称谓：主送用"贵X"、发文用"我X"，自然融入正文，勿写"贵委："格式。
 
-【公文语言规范】
-开头常用语：
-- "根据...精神/要求"
-- "为...，经研究决定"
-- "现将...通知如下"
+【语言要求】
+开头："根据...精神""现将...通知如下"
+主体：用"一、二、三"序号，段落间双换行
+结尾："特此通知"
+避免口语化，用规范书面语
 
-主体表述：
-- 使用"一、二、三"序号
-- 每个要点独立成段，段落间用双换行符分隔
-- 时间地点等要素明确具体
+直接输出正文，勿含标题、主送机关、落款。""",
 
-结尾用语：
-- "特此通知"（或无特定结束语）
+            'letter': f"""资深公文写作专家，精通GB/T 9704-2012。
 
-语言特点：
-- 准确、简洁、庄重
-- 避免口语化（"搞""弄""挺好"）
-- 使用规范书面语（"开展""实施""落实"）
+任务：将"{content}"转为规范函正文（主送：{recipient}）
 
-【输出要求】
-1. 段落间用双换行符分隔
-2. 使用规范序号（一、二、三）
-3. 不要添加缩进空格（系统自动处理）
-4. 结尾必须有规范结束语
+【行文规范】
+根据"{recipient}"判断层级，用恰当语气。称谓：主送用"贵X"、发文用"我X"，自然融入正文，勿写"贵委："格式。
 
-【示例结构】
-根据XX文件精神，为做好XX工作，现将有关事项通知如下：
+【语言要求】
+开头："收悉""根据工作需要""现函告如下"
+结尾：对上级"恳请支持为盼"、对平级"请予支持为盼"、对下级"请予配合"
+语气平等诚恳，段落间双换行
 
-一、会议时间和地点
-XX年XX月XX日上午9:00，在XX会议室召开。
+直接输出正文，勿含标题、主送机关、落款。""",
 
-二、参会人员
-各部门负责人及相关工作人员。
+            'request': f"""资深公文写作专家，精通GB/T 9704-2012。
 
-三、有关要求
-请各单位高度重视，按时参加。
+任务：将"{content}"转为规范请示正文（主送：{recipient}）
 
-特此通知
+【行文规范】
+请示用于下级向上级，必须恭敬诚恳。称谓：主送用"贵X"、发文用"我X"，自然融入正文，勿写"贵委："格式。
 
-直接输出正文，不要添加标题、主送机关、落款。""",
+【语言要求】
+开头："根据...规定""现请示如下"
+主体：一文一事，理由充分，用"一、二、三"序号
+结尾："妥否，请批示"或"当否，请批示"（必须）
+段落间双换行
 
-            'letter': f"""你是资深公文写作专家，精通 GB/T 9704-2012 标准。
+直接输出正文，勿含标题、主送机关、落款。""",
 
-任务：将自然语言转换为规范的函正文。
+            'report': f"""资深公文写作专家，精通GB/T 9704-2012。
 
-主送机关：{recipient}
-用户内容：{content}
+任务：将"{content}"转为规范报告正文（主送：{recipient}）
 
-【公文语言规范】
-开头常用语：
-- "收悉""接函""来函收悉"
-- "根据工作需要"
-- "为...，现函告如下"
+【行文规范】
+报告用于下级向上级汇报，语气客观恭敬。称谓：主送用"贵X"、发文用"我X"，自然融入正文，勿写"贵委："格式。
 
-主体表述：
-- 平等、诚恳的语气
-- 事项阐述清晰具体
-- 可使用序号组织（一、二、三）
+【语言要求】
+开头："根据...要求""现将...报告如下"
+主体：情况详实，分析深入，用"一、二、三"序号
+结尾："特此报告"（必须）
+段落间双换行
 
-结尾用语：
-- "请予支持为盼"
-- "请予函复为荷"
-- "特此函告"
-
-语言特点：
-- 平等协商的语气
-- 简洁明了
-- 避免命令式表达
-
-【输出要求】
-段落间用双换行符分隔，不要添加缩进空格。
-
-直接输出正文，不要添加标题、主送机关、落款。""",
-
-            'request': f"""你是资深公文写作专家，精通 GB/T 9704-2012 标准。
-
-任务：将自然语言转换为规范的请示正文。
-
-主送机关：{recipient}
-用户内容：{content}
-
-【公文语言规范】
-开头常用语：
-- "根据...规定"
-- "为...，现请示如下"
-- "鉴于..."
-
-主体表述：
-- 一文一事原则
-- 理由充分，政策依据明确
-- 恭敬、诚恳的语气
-- 使用序号组织（一、二、三）
-
-结尾用语（必须）：
-- "妥否，请批示"
-- "当否，请批示"
-- "以上请示，请予批准"
-
-语言特点：
-- 恭敬、诚恳
-- 理由充分
-- 请求明确
-
-【输出要求】
-段落间用双换行符分隔，结尾必须有请示用语。
-
-直接输出正文，不要添加标题、主送机关、落款。""",
-
-            'report': f"""你是资深公文写作专家，精通 GB/T 9704-2012 标准。
-
-任务：将自然语言转换为规范的报告正文。
-
-主送机关：{recipient}
-用户内容：{content}
-
-【公文语言规范】
-开头常用语：
-- "根据...要求"
-- "现将...报告如下"
-- "按照...部署"
-
-主体表述：
-- 工作情况汇报详实
-- 问题分析深入
-- 下一步计划具体可行
-- 使用序号组织（一、二、三）
-
-结尾用语（必须）：
-- "特此报告"
-
-语言特点：
-- 客观、准确
-- 数据详实
-- 分析深入
-
-【输出要求】
-段落间用双换行符分隔，结尾必须是"特此报告"。
-
-直接输出正文，不要添加标题、主送机关、落款。"""
+直接输出正文，勿含标题、主送机关、落款。"""
         }
 
         return prompts.get(doc_type, prompts['notice'])
@@ -263,3 +181,76 @@ XX年XX月XX日上午9:00，在XX会议室召开。
             max_tokens=2000
         )
         return response.choices[0].message.content
+
+    def generate_with_imitation(self, doc_type, recipient, content, title, issuer, date, attachments, reference_analysis, imitation_strength):
+        """基于参考风格生成公文"""
+        doc_type_names = {
+            'notice': '通知',
+            'letter': '函',
+            'request': '请示',
+            'report': '报告'
+        }
+
+        strength_desc = {
+            'strict': '严格：高度贴合参考风格，保持相似的句式和用词习惯',
+            'moderate': '适中：学习核心特征，但允许自然变化',
+            'loose': '宽松：仅参考整体风格，具体表达灵活处理'
+        }
+
+        prompt = f"""你是一位资深公文写作专家。请根据以下参考风格特征，生成一份新的{doc_type_names.get(doc_type, '公文')}。
+
+【风格特征】（从参考公文中学习）
+- 语气：{reference_analysis.get('tone', '正式规范')}
+- 结构：{reference_analysis.get('structure', '层次清晰')}
+- 用词：{reference_analysis.get('vocabulary', '书面语为主')}
+- 句式：{reference_analysis.get('sentenceStyle', '句式规范')}
+- 逻辑：{reference_analysis.get('logicFlow', '逻辑严密')}
+
+【仿写强度】：{imitation_strength}
+{strength_desc.get(imitation_strength, '')}
+
+【新公文信息】
+主送机关：{recipient}
+主要内容：{content}
+
+**关键约束**：
+1. 只学习风格特征，不复制具体内容、事实、数据
+2. 标题、发文机关、日期等由系统填充，正文中不要提及
+3. 不要生硬套用参考语句，保持逻辑自洽
+
+【行文规范】
+根据"{recipient}"判断层级（省/市/区县、委/厅/局/办），用恰当语气。称谓：主送用"贵X"、发文用"我X"，自然融入正文。
+主送机关已由系统单独显示，正文直接从内容开始，勿写"贵委："这样的格式。"""
+
+        if attachments and len(attachments) > 0:
+            prompt += f"\n\n附件{len(attachments)}个："
+            for i, att in enumerate(attachments):
+                prompt += f"\n{i+1}.{att}"
+            prompt += "\n正文中自然插入'（见附件X）'，位置在相关句末或段末。"
+
+        prompt += f"""
+
+请生成符合GB/T 9704-2012标准的规范公文正文，体现参考风格。段落间用双换行符分隔。
+
+{"请根据内容拟定标题。" if not title else f"标题：{title}"}
+
+请按以下格式输出（第一行是标题，第二行空行，第三行开始是正文）：
+标题内容
+
+正文内容"""
+
+        if self.provider == 'claude':
+            result = self._call_claude(prompt)
+        else:
+            result = self._call_openai(prompt)
+
+        import re
+        result = re.sub(r'^```.*?\n', '', result.strip())
+        result = re.sub(r'\n```$', '', result.strip())
+
+        parts = result.strip().split('\n\n', 1)
+        if len(parts) == 2:
+            return {'title': parts[0].strip(), 'content': parts[1].strip()}
+        else:
+            lines = result.strip().split('\n', 1)
+            return {'title': lines[0].strip() if lines else '未命名文档', 'content': lines[1].strip() if len(lines) > 1 else result}

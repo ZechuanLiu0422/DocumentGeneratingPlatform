@@ -16,6 +16,8 @@ def main():
     parser.add_argument('--api-key', required=True, help='API Key')
     parser.add_argument('--title', default='', help='文档标题（可选）')
     parser.add_argument('--attachments', default='[]', help='附件列表（JSON格式）')
+    parser.add_argument('--reference-analysis', default='', help='参考风格分析（JSON格式）')
+    parser.add_argument('--imitation-strength', default='moderate', help='仿写强度 (strict/moderate/loose)')
 
     args = parser.parse_args()
 
@@ -25,7 +27,28 @@ def main():
         # 解析附件
         attachments = json.loads(args.attachments) if args.attachments else []
 
-        if not args.title:
+        # 解析参考风格分析
+        reference_analysis = json.loads(args.reference_analysis) if args.reference_analysis else None
+
+        # 如果有参考风格分析，使用仿写模式
+        if reference_analysis:
+            generated_content = client.generate_with_imitation(
+                doc_type=args.doc_type,
+                recipient=args.recipient,
+                content=args.content,
+                title=args.title,
+                issuer='',
+                date='',
+                attachments=attachments,
+                reference_analysis=reference_analysis,
+                imitation_strength=args.imitation_strength
+            )
+            result = {
+                'success': True,
+                'generated_content': generated_content['content'],
+                'generated_title': generated_content['title']
+            }
+        elif not args.title:
             generated_content = client.generate_document_with_title(
                 doc_type=args.doc_type,
                 recipient=args.recipient,

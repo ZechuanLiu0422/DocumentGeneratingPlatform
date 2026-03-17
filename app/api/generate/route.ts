@@ -19,7 +19,8 @@ export async function POST(request: NextRequest) {
     const { docType, title, recipient, content, issuer, date, generatedContent, provider, attachments, contactName, contactPhone } = await request.json();
 
     const templatePath = path.join(process.cwd(), 'templates', `${docType}.json`);
-    const outputPath = path.join(process.cwd(), '.tmp', `${Date.now()}_${docType}.docx`);
+    const sanitizedTitle = title.replace(/[\/\\:*?"<>|]/g, '_');
+    const outputPath = path.join(process.cwd(), '.tmp', `${sanitizedTitle}.docx`);
 
     const contentData = JSON.stringify({
       title,

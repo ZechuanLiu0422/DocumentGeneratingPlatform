@@ -29,6 +29,11 @@ export default function GeneratePage() {
   const [isEditing, setIsEditing] = useState(false);
   const [attachments, setAttachments] = useState<string[]>([]);
   const [newAttachment, setNewAttachment] = useState('');
+  const [referenceFile, setReferenceFile] = useState<File | null>(null);
+  const [referenceAnalysis, setReferenceAnalysis] = useState<any>(null);
+  const [imitationStrength, setImitationStrength] = useState('moderate');
+  const [analyzingReference, setAnalyzingReference] = useState(false);
+  const [contacts, setContacts] = useState<any[]>([]);
   const editableRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -36,6 +41,7 @@ export default function GeneratePage() {
       router.push('/login');
     } else if (status === 'authenticated') {
       fetchPhrases();
+      fetchContacts();
       const savedProvider = localStorage.getItem('lastUsedProvider');
       if (savedProvider) {
         setProvider(savedProvider);
@@ -52,6 +58,14 @@ export default function GeneratePage() {
     const data = await res.json();
     if (data.phrases) {
       setPhrases(data.phrases);
+    }
+  };
+
+  const fetchContacts = async () => {
+    const res = await fetch('/api/contacts');
+    const data = await res.json();
+    if (data.contacts) {
+      setContacts(data.contacts);
     }
   };
 
@@ -112,6 +126,83 @@ export default function GeneratePage() {
     setAttachments(attachments.filter((_, i) => i !== index));
   };
 
+  const handleReferenceUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!docType) {
+      alert('请先选择文档类型');
+      return;
+    }
+
+    setReferenceFile(file);
+    setAnalyzingReference(true);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('docType', docType);
+
+      const uploadRes = await fetch('/api/upload-reference', {
+        method: 'POST',
+        body: formData
+      });
+      const uploadData = await uploadRes.json();
+
+      if (!uploadData.success) {
+        alert(uploadData.error || '文件上传失败');
+        return;
+      }
+
+      const analyzeRes = await fetch('/api/analyze-reference', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          docType,
+          fileContent: uploadData.content,
+          provider
+        })
+      });
+      const analyzeData = await analyzeRes.json();
+
+      if (analyzeData.success) {
+        setReferenceAnalysis(analyzeData.analysis);
+      } else {
+        alert(analyzeData.error || '分析失败');
+      }
+    } catch (error) {
+      alert('处理失败，请重试');
+    } finally {
+      setAnalyzingReference(false);
+    }
+  };
+
+  const handleRemoveReference = () => {
+    setReferenceFile(null);
+    setReferenceAnalysis(null);
+  };
+
+  const handleSaveContact = async () => {
+    if (!formData.contactName || !formData.contactPhone) {
+      alert('请填写联系人和电话');
+      return;
+    }
+    await fetch('/api/contacts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: formData.contactName, phone: formData.contactPhone })
+    });
+    fetchContacts();
+    alert('联系人已保存');
+  };
+
+  const handleSelectContact = (name: string) => {
+    const contact = contacts.find(c => c.name === name);
+    if (contact) {
+      setFormData({...formData, contactName: contact.name, contactPhone: contact.phone});
+    }
+  };
+
   const docTypes = [
     { id: 'notice', name: '通知', desc: '用于发布重要事项、安排工作等' },
     { id: 'letter', name: '函', desc: '用于不相隶属机关之间商洽工作' },
@@ -136,7 +227,9 @@ export default function GeneratePage() {
           recipient: formData.recipient,
           content: formData.content,
           provider,
-          attachments
+          attachments,
+          referenceAnalysis,
+          imitationStrength
         })
       });
 
@@ -265,130 +358,156 @@ export default function GeneratePage() {
     return <div className="min-h-screen flex items-center justify-center">加载中...</div>;
   }
 
-  if (!docType) {
-    return (
-      <div className="min-h-screen bg-gray-50 p-8">
-        <div className="max-w-4xl mx-auto">
-          <div className="flex justify-between items-center mb-8">
-            <h1 className="text-3xl font-bold">选择公文类型</h1>
-            <button onClick={() => router.push('/')} className="text-blue-600 hover:underline">返回首页</button>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            {docTypes.map(type => (
-              <button
-                key={type.id}
-                onClick={() => setDocType(type.id)}
-                className="p-6 bg-white rounded-lg shadow hover:shadow-lg transition"
-              >
-                <h2 className="text-xl font-bold mb-2">{type.name}</h2>
-                <p className="text-gray-600">{type.desc}</p>
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-gray-50 p-8">
       <div className="max-w-6xl mx-auto">
         <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold">生成{docTypes.find(t => t.id === docType)?.name}</h1>
+          <h1 className="text-2xl font-bold">生成公文</h1>
           <div className="flex gap-4">
-            <button onClick={() => router.push('/settings')} className="text-blue-600">设置</button>
-            <button onClick={() => setDocType('')} className="text-blue-600">返回</button>
+            <button onClick={handleSaveDraft} className="text-blue-600 hover:underline">保存草稿</button>
+            <button onClick={() => router.push('/settings')} className="text-blue-600 hover:underline">设置</button>
+            <button onClick={() => router.push('/')} className="text-blue-600 hover:underline">返回首页</button>
           </div>
         </div>
 
         <div className="grid grid-cols-2 gap-6">
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-lg font-bold mb-4">输入内容</h2>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium mb-1">标题（可选）</label>
-                <input
-                  type="text"
-                  value={formData.title}
-                  onChange={(e) => setFormData({...formData, title: e.target.value})}
-                  className="w-full px-3 py-2 border rounded-md"
-                  placeholder="留空则由 AI 自动生成标题"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">主送机关</label>
-                <input
-                  type="text"
-                  value={formData.recipient}
-                  onChange={(e) => setFormData({...formData, recipient: e.target.value})}
-                  list="recipient-list"
-                  className="w-full px-3 py-2 border rounded-md"
-                  placeholder="例如：各部门、各单位"
-                />
-                <datalist id="recipient-list">
-                  {phrases.filter(p => p.type === 'recipient').map(p => (
-                    <option key={p.id} value={p.phrase} />
-                  ))}
-                </datalist>
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">主要内容</label>
-                <textarea
-                  value={formData.content}
-                  onChange={(e) => setFormData({...formData, content: e.target.value})}
-                  className="w-full px-3 py-2 border rounded-md"
-                  rows={10}
-                  placeholder="请用自然语言描述完整内容，AI 会自动转换为规范格式"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">发文机关</label>
-                <input
-                  type="text"
-                  value={formData.issuer}
-                  onChange={(e) => setFormData({...formData, issuer: e.target.value})}
-                  list="issuer-list"
-                  className="w-full px-3 py-2 border rounded-md"
-                  placeholder="例如：XX单位办公室"
-                />
-                <datalist id="issuer-list">
-                  {phrases.filter(p => p.type === 'issuer').map(p => (
-                    <option key={p.id} value={p.phrase} />
-                  ))}
-                </datalist>
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">成文日期</label>
-                <input
-                  type="date"
-                  value={formData.date}
-                  onChange={(e) => setFormData({...formData, date: e.target.value})}
-                  className="w-full px-3 py-2 border rounded-md"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">联系人</label>
-                <input
-                  type="text"
-                  value={formData.contactName}
-                  onChange={(e) => setFormData({...formData, contactName: e.target.value})}
-                  className="w-full px-3 py-2 border rounded-md"
-                  placeholder="例如：张三"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">联系电话</label>
-                <input
-                  type="text"
-                  value={formData.contactPhone}
-                  onChange={(e) => setFormData({...formData, contactPhone: e.target.value})}
-                  className="w-full px-3 py-2 border rounded-md"
-                  placeholder="例如：010-12345678"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">附件（可选）</label>
-                <div className="flex gap-2 mb-2">
+          {/* 左列：文档信息 + AI设置 */}
+          <div className="flex flex-col gap-4">
+            {/* 文档信息区（可滚动） */}
+            <div className="bg-white rounded-lg shadow flex-1">
+              <div className="p-6 max-h-[calc(100vh-20rem)] overflow-y-auto">
+                <h2 className="text-lg font-bold mb-4">文档信息</h2>
+                <div className="space-y-4">
+                  {/* 文档类型下拉选择器 */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">文档类型</label>
+                    <select
+                      value={docType}
+                      onChange={(e) => setDocType(e.target.value)}
+                      className="w-full px-3 py-2 border rounded-md"
+                    >
+                      <option value="">请选择文档类型</option>
+                      {docTypes.map(type => (
+                        <option key={type.id} value={type.id}>{type.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* 标题（可选） */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">标题（可选）</label>
+                    <input
+                      type="text"
+                      value={formData.title}
+                      onChange={(e) => setFormData({...formData, title: e.target.value})}
+                      className="w-full px-3 py-2 border rounded-md"
+                      placeholder="留空则由 AI 自动生成标题"
+                    />
+                  </div>
+
+                  {/* 主送机关 */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">主送机关</label>
+                    <input
+                      type="text"
+                      value={formData.recipient}
+                      onChange={(e) => setFormData({...formData, recipient: e.target.value})}
+                      list="recipient-list"
+                      className="w-full px-3 py-2 border rounded-md"
+                      placeholder="例如：各部门、各单位"
+                    />
+                    <datalist id="recipient-list">
+                      {phrases.filter(p => p.type === 'recipient').map(p => (
+                        <option key={p.id} value={p.phrase} />
+                      ))}
+                    </datalist>
+                  </div>
+
+                  {/* 主要内容 */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">主要内容</label>
+                    <textarea
+                      value={formData.content}
+                      onChange={(e) => setFormData({...formData, content: e.target.value})}
+                      className="w-full px-3 py-2 border rounded-md"
+                      rows={10}
+                      placeholder="请用自然语言描述完整内容，AI 会自动转换为规范格式"
+                    />
+                  </div>
+
+                  {/* 发文机关 */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">发文机关</label>
+                    <input
+                      type="text"
+                      value={formData.issuer}
+                      onChange={(e) => setFormData({...formData, issuer: e.target.value})}
+                      list="issuer-list"
+                      className="w-full px-3 py-2 border rounded-md"
+                      placeholder="例如：XX单位办公室"
+                    />
+                    <datalist id="issuer-list">
+                      {phrases.filter(p => p.type === 'issuer').map(p => (
+                        <option key={p.id} value={p.phrase} />
+                      ))}
+                    </datalist>
+                  </div>
+
+                  {/* 成文日期 */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">成文日期</label>
+                    <input
+                      type="date"
+                      value={formData.date}
+                      onChange={(e) => setFormData({...formData, date: e.target.value})}
+                      className="w-full px-3 py-2 border rounded-md"
+                    />
+                  </div>
+
+                  {/* 联系人 */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">联系人</label>
+                    <input
+                      type="text"
+                      value={formData.contactName}
+                      onChange={(e) => {
+                        setFormData({...formData, contactName: e.target.value});
+                        handleSelectContact(e.target.value);
+                      }}
+                      list="contact-list"
+                      className="w-full px-3 py-2 border rounded-md"
+                      placeholder="例如：张三"
+                    />
+                    <datalist id="contact-list">
+                      {contacts.map(c => (
+                        <option key={c.id} value={c.name} />
+                      ))}
+                    </datalist>
+                  </div>
+
+                  {/* 联系电话 */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">联系电话</label>
+                    <input
+                      type="text"
+                      value={formData.contactPhone}
+                      onChange={(e) => setFormData({...formData, contactPhone: e.target.value})}
+                      className="w-full px-3 py-2 border rounded-md"
+                      placeholder="例如：010-12345678"
+                    />
+                    <button
+                      onClick={handleSaveContact}
+                      className="mt-2 text-sm text-blue-600 hover:underline"
+                    >
+                      保存为常用联系人
+                    </button>
+                  </div>
+
+                  {/* 附件（可选） */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">附件（可选）</label>
+                    <div className="text-xs text-gray-500 mb-2">添加附件名称，正文中会自动引用</div>
+                    <div className="flex gap-2 mb-2">
                   <input
                     type="text"
                     value={newAttachment}
@@ -420,41 +539,104 @@ export default function GeneratePage() {
                   </div>
                 )}
               </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">AI 提供商</label>
-                <select
-                  value={provider}
-                  onChange={(e) => {
-                    setProvider(e.target.value);
-                    localStorage.setItem('lastUsedProvider', e.target.value);
-                  }}
-                  className="w-full px-3 py-2 border rounded-md"
-                >
-                  <option value="claude">Claude</option>
-                  <option value="openai">OpenAI</option>
-                  <option value="doubao">豆包</option>
-                  <option value="glm">智谱 GLM</option>
-                </select>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={handlePolish}
-                  disabled={loading}
-                  className="flex-1 bg-blue-600 text-white py-2 rounded-md hover:bg-blue-700 disabled:bg-gray-400"
-                >
-                  {loading ? '生成中...' : '生成公文'}
-                </button>
-                <button
-                  onClick={handleSaveDraft}
-                  className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
-                >
-                  保存草稿
-                </button>
+            </div>
+          </div>
+        </div>
+
+            {/* AI设置区（固定高度） */}
+            <div className="bg-white rounded-lg shadow">
+              <div className="p-6">
+                <h2 className="text-lg font-bold mb-4">AI 生成设置</h2>
+                <div className="space-y-4">
+                  {/* AI提供商 */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">AI 提供商</label>
+                    <select
+                      value={provider}
+                      onChange={(e) => {
+                        setProvider(e.target.value);
+                        localStorage.setItem('lastUsedProvider', e.target.value);
+                      }}
+                      className="w-full px-3 py-2 border rounded-md"
+                    >
+                      <option value="claude">Claude</option>
+                      <option value="openai">OpenAI</option>
+                      <option value="doubao">豆包</option>
+                      <option value="glm">智谱 GLM</option>
+                    </select>
+                  </div>
+
+                  {/* 仿写模式（可选） */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">仿写模式（可选）</label>
+                    <div className="text-xs text-gray-500 mb-2">上传参考公文，AI 将学习其写作风格</div>
+                    {!referenceFile ? (
+                      <div>
+                        <input
+                          type="file"
+                          accept=".docx,.pdf,.txt"
+                          onChange={handleReferenceUpload}
+                          className="w-full px-3 py-2 border rounded-md text-sm"
+                        />
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between bg-gray-50 px-3 py-2 rounded">
+                          <span className="text-sm">{referenceFile.name}</span>
+                          <button onClick={handleRemoveReference} className="text-red-600 text-sm">删除</button>
+                        </div>
+                        {analyzingReference && <p className="text-sm text-blue-600">分析中...</p>}
+                        {referenceAnalysis && (
+                          <div className="bg-blue-50 p-3 rounded text-sm space-y-1">
+                            <p><strong>语气：</strong>{referenceAnalysis.tone}</p>
+                            <p><strong>结构：</strong>{referenceAnalysis.structure}</p>
+                            <p><strong>用词：</strong>{referenceAnalysis.vocabulary}</p>
+                          </div>
+                        )}
+                        {referenceAnalysis && (
+                          <div>
+                            <label className="block text-sm font-medium mb-2">仿写强度</label>
+                            <div className="flex gap-2">
+                              {[
+                                { value: 'strict', label: '严格' },
+                                { value: 'moderate', label: '适中' },
+                                { value: 'loose', label: '宽松' }
+                              ].map(option => (
+                                <button
+                                  key={option.value}
+                                  onClick={() => setImitationStrength(option.value)}
+                                  className={`flex-1 py-2 rounded-md text-sm ${
+                                    imitationStrength === option.value
+                                      ? 'bg-blue-600 text-white'
+                                      : 'bg-gray-100 hover:bg-gray-200'
+                                  }`}
+                                >
+                                  {option.label}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 生成按钮 */}
+                  <button
+                    onClick={handlePolish}
+                    disabled={loading}
+                    className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white py-3 rounded-lg font-medium transition-colors"
+                  >
+                    {loading ? '生成中...' : '生成文档'}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-lg shadow p-6 flex flex-col h-[calc(100vh-12rem)]">
+          {/* 右列：预览和修改 */}
+          <div className="bg-white rounded-lg shadow">
+        <div className="p-6 max-h-[calc(100vh-12rem)] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-lg font-bold">预览与修改</h2>
               {generatedContent && (
@@ -572,6 +754,7 @@ export default function GeneratePage() {
               <p className="text-gray-400">点击"生成公文"后，内容将显示在这里</p>
             )}
           </div>
+        </div>
         </div>
       </div>
     </div>

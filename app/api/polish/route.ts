@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const { docType, title, recipient, content, provider, attachments } = await request.json();
+    const { docType, title, recipient, content, provider, attachments, referenceAnalysis, imitationStrength } = await request.json();
 
     const rows = await query<any>('SELECT api_key FROM ai_configs WHERE user_id = ? AND provider = ?', [parseInt(session.user?.id || '1'), provider]);
 
@@ -24,15 +24,21 @@ export async function POST(request: NextRequest) {
 
     const apiKey = rows[0].api_key;
 
-    // 清理title中的特殊字符
     const cleanTitle = title ? title.replace(/[`'"\\]/g, '') : '';
 
-    // 准备附件参数
     const attachmentsParam = attachments && attachments.length > 0
       ? ` --attachments '${JSON.stringify(attachments).replace(/'/g, "\\'")}'`
       : '';
 
-    const cmd = `python3 tools/polish_text.py --doc-type "${docType}" --recipient "${recipient}" --content "${content.replace(/"/g, '\\"')}" --provider "${provider}" --api-key "${apiKey}"${cleanTitle ? ` --title "${cleanTitle}"` : ''}${attachmentsParam}`;
+    const referenceParam = referenceAnalysis
+      ? ` --reference-analysis '${JSON.stringify(referenceAnalysis).replace(/'/g, "\\'")}'`
+      : '';
+
+    const strengthParam = imitationStrength
+      ? ` --imitation-strength "${imitationStrength}"`
+      : '';
+
+    const cmd = `python3 tools/polish_text.py --doc-type "${docType}" --recipient "${recipient}" --content "${content.replace(/"/g, '\\"')}" --provider "${provider}" --api-key "${apiKey}"${cleanTitle ? ` --title "${cleanTitle}"` : ''}${attachmentsParam}${referenceParam}${strengthParam}`;
 
     const { stdout } = await execAsync(cmd);
     const polishResult = JSON.parse(stdout);

@@ -17,6 +17,8 @@ export default function SettingsPage() {
   const [message, setMessage] = useState('');
   const [phrases, setPhrases] = useState<any[]>([]);
   const [newPhrase, setNewPhrase] = useState({ type: 'recipient', phrase: '' });
+  const [contacts, setContacts] = useState<any[]>([]);
+  const [newContact, setNewContact] = useState({ name: '', phone: '' });
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -24,6 +26,7 @@ export default function SettingsPage() {
     } else if (status === 'authenticated') {
       fetchConfigs();
       fetchPhrases();
+      fetchContacts();
     }
   }, [status, router]);
 
@@ -43,6 +46,14 @@ export default function SettingsPage() {
     }
   };
 
+  const fetchContacts = async () => {
+    const res = await fetch('/api/contacts');
+    const data = await res.json();
+    if (data.contacts) {
+      setContacts(data.contacts);
+    }
+  };
+
   const handleAddPhrase = async () => {
     if (!newPhrase.phrase.trim()) return;
     await fetch('/api/common-phrases', {
@@ -54,9 +65,25 @@ export default function SettingsPage() {
     fetchPhrases();
   };
 
+  const handleAddContact = async () => {
+    if (!newContact.name.trim() || !newContact.phone.trim()) return;
+    await fetch('/api/contacts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newContact)
+    });
+    setNewContact({ name: '', phone: '' });
+    fetchContacts();
+  };
+
   const handleDeletePhrase = async (id: number) => {
     await fetch(`/api/common-phrases?id=${id}`, { method: 'DELETE' });
     fetchPhrases();
+  };
+
+  const handleDeleteContact = async (id: number) => {
+    await fetch(`/api/contacts?id=${id}`, { method: 'DELETE' });
+    fetchContacts();
   };
 
   const handleSave = async (provider: string) => {
@@ -226,6 +253,41 @@ export default function SettingsPage() {
                 </div>
               </div>
             ))}
+          </div>
+
+          <div className="border-t pt-4 mt-4">
+            <h3 className="text-sm font-medium mb-2">常用联系人</h3>
+            <div className="flex gap-2 mb-3">
+              <input
+                type="text"
+                value={newContact.name}
+                onChange={(e) => setNewContact({ ...newContact, name: e.target.value })}
+                className="px-3 py-2 border rounded-md"
+                placeholder="姓名"
+              />
+              <input
+                type="text"
+                value={newContact.phone}
+                onChange={(e) => setNewContact({ ...newContact, phone: e.target.value })}
+                onKeyPress={(e) => e.key === 'Enter' && handleAddContact()}
+                className="flex-1 px-3 py-2 border rounded-md"
+                placeholder="电话"
+              />
+              <button
+                onClick={handleAddContact}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+              >
+                添加
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {contacts.map(c => (
+                <div key={c.id} className="flex items-center gap-1 px-3 py-1 bg-gray-100 rounded-full text-sm">
+                  <span>{c.name} ({c.phone})</span>
+                  <button onClick={() => handleDeleteContact(c.id)} className="text-red-600 hover:text-red-800">×</button>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
 
