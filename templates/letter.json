@@ -1,0 +1,108 @@
+{
+  "type": "letter",
+  "name": "函",
+  "sections": [
+    {
+      "field": "title",
+      "type": "text",
+      "description": "标题",
+      "style": "title",
+      "align": "center"
+    },
+    {
+      "field": "_blank1",
+      "type": "text",
+      "description": "空行",
+      "style": "body"
+    },
+    {
+      "field": "recipient",
+      "type": "text",
+      "description": "主送机关",
+      "style": "body",
+      "align": "justify"
+    },
+    {
+      "field": "content",
+      "type": "text",
+      "description": "正文",
+      "style": "body",
+      "indent": 2,
+      "align": "justify"
+    },
+    {
+      "field": "_blank2",
+      "type": "text",
+      "description": "空行",
+      "style": "body"
+    },
+    {
+      "field": "closing",
+      "type": "text",
+      "description": "结束语",
+      "style": "body",
+      "indent": 2,
+      "align": "justify"
+    },
+    {
+      "field": "attachment",
+      "type": "text",
+      "description": "附件",
+      "style": "body",
+      "indent": 2,
+      "align": "justify"
+    },
+    {
+      "field": "issuer",
+      "type": "text",
+      "description": "发文机关",
+      "style": "body",
+      "align": "right",
+      "right_space_chars": 2
+    },
+    {
+      "field": "date",
+      "type": "text",
+      "description": "成文日期",
+      "style": "body",
+      "align": "right",
+      "right_space_chars": 2
+    }
+  ],
+  "styles": {
+    "title": {
+      "font": "方正小标宋简体",
+      "size": 22,
+      "bold": false,
+      "line_spacing": 28,
+      "line_spacing_rule": "exactly"
+    },
+    "body": {
+      "font": "仿宋_GB2312",
+      "size": 16,
+      "line_spacing": 28,
+      "line_spacing_rule": "exactly"
+    },
+    "heading1": {
+      "font": "黑体",
+      "size": 16,
+      "bold": false,
+      "line_spacing": 28,
+      "line_spacing_rule": "exactly"
+    },
+    "heading2": {
+      "font": "楷体_GB2312",
+      "size": 16,
+      "bold": true,
+      "line_spacing": 28,
+      "line_spacing_rule": "exactly"
+    }
+  },
+  "page_setup": {
+    "paper_size": "A4",
+    "top_margin": 3.7,
+    "bottom_margin": 3.5,
+    "left_margin": 2.8,
+    "right_margin": 2.6
+  }
+}

@@ -1,0 +1,166 @@
+{
+  "notice": {
+    "name": "通知",
+    "description": "用于发布重要事项、安排工作等",
+    "fields": [
+      {
+        "name": "title",
+        "label": "标题",
+        "type": "text",
+        "required": true,
+        "placeholder": "例如：关于召开年度总结会议的通知"
+      },
+      {
+        "name": "recipient",
+        "label": "主送机关",
+        "type": "text",
+        "required": true,
+        "placeholder": "例如：各部门、各单位"
+      },
+      {
+        "name": "content",
+        "label": "主要内容",
+        "type": "textarea",
+        "required": true,
+        "rows": 10,
+        "placeholder": "请用自然语言描述通知的完整内容，包括：\n- 发文背景和原因\n- 具体通知事项\n- 时间、地点等细节\n- 相关要求和注意事项\n- 如有引用文件或领导讲话，也可以在此说明\n\nAI 会自动将您的描述转换为规范的公文格式。"
+      },
+      {
+        "name": "issuer",
+        "label": "发文机关",
+        "type": "text",
+        "required": true,
+        "placeholder": "例如：XX单位办公室"
+      },
+      {
+        "name": "date",
+        "label": "成文日期",
+        "type": "date",
+        "required": true
+      }
+    ]
+  },
+  "letter": {
+    "name": "函",
+    "description": "用于不相隶属机关之间商洽工作、询问和答复问题",
+    "fields": [
+      {
+        "name": "title",
+        "label": "标题",
+        "type": "text",
+        "required": true,
+        "placeholder": "例如：关于请求协助解决XX问题的函"
+      },
+      {
+        "name": "recipient",
+        "label": "主送机关",
+        "type": "text",
+        "required": true,
+        "placeholder": "例如：XX单位"
+      },
+      {
+        "name": "content",
+        "label": "主要内容",
+        "type": "textarea",
+        "required": true,
+        "rows": 10,
+        "placeholder": "请用自然语言描述函的完整内容，包括：\n- 致函的背景和原因\n- 需要商洽的具体事项\n- 您的请求或建议\n- 相关依据或参考文件\n\nAI 会自动将您的描述转换为规范的函格式。"
+      },
+      {
+        "name": "issuer",
+        "label": "发文机关",
+        "type": "text",
+        "required": true,
+        "placeholder": "例如：XX单位"
+      },
+      {
+        "name": "date",
+        "label": "成文日期",
+        "type": "date",
+        "required": true
+      }
+    ]
+  },
+  "request": {
+    "name": "请示",
+    "description": "用于向上级机关请求指示、批准",
+    "fields": [
+      {
+        "name": "title",
+        "label": "标题",
+        "type": "text",
+        "required": true,
+        "placeholder": "例如：关于XX事项的请示"
+      },
+      {
+        "name": "recipient",
+        "label": "主送机关",
+        "type": "text",
+        "required": true,
+        "placeholder": "上级机关名称"
+      },
+      {
+        "name": "content",
+        "label": "主要内容",
+        "type": "textarea",
+        "required": true,
+        "rows": 10,
+        "placeholder": "请用自然语言描述请示的完整内容，包括：\n- 请示的背景和必要性\n- 具体请示的事项\n- 理由和政策依据\n- 您的建议方案（如有）\n\nAI 会自动将您的描述转换为规范的请示格式。"
+      },
+      {
+        "name": "issuer",
+        "label": "发文机关",
+        "type": "text",
+        "required": true,
+        "placeholder": "例如：XX单位"
+      },
+      {
+        "name": "date",
+        "label": "成文日期",
+        "type": "date",
+        "required": true
+      }
+    ]
+  },
+  "report": {
+    "name": "报告",
+    "description": "用于向上级机关汇报工作、反映情况",
+    "fields": [
+      {
+        "name": "title",
+        "label": "标题",
+        "type": "text",
+        "required": true,
+        "placeholder": "例如：关于XX工作情况的报告"
+      },
+      {
+        "name": "recipient",
+        "label": "主送机关",
+        "type": "text",
+        "required": true,
+        "placeholder": "上级机关名称"
+      },
+      {
+        "name": "content",
+        "label": "主要内容",
+        "type": "textarea",
+        "required": true,
+        "rows": 10,
+        "placeholder": "请用自然语言描述报告的完整内容，包括：\n- 报告的背景\n- 工作开展情况\n- 存在的问题和困难\n- 下一步工作计划\n- 相关数据或文件依据\n\nAI 会自动将您的描述转换为规范的报告格式。"
+      },
+      {
+        "name": "issuer",
+        "label": "发文机关",
+        "type": "text",
+        "required": true,
+        "placeholder": "例如：XX单位"
+      },
+      {
+        "name": "date",
+        "label": "成文日期",
+        "type": "date",
+        "required": true
+      }
+    ]
+  }
+}
