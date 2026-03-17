@@ -34,6 +34,9 @@ export default function GeneratePage() {
   const [imitationStrength, setImitationStrength] = useState('moderate');
   const [analyzingReference, setAnalyzingReference] = useState(false);
   const [contacts, setContacts] = useState<any[]>([]);
+  const [contentHistory, setContentHistory] = useState<string[]>([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
+  const [latestVersion, setLatestVersion] = useState('');
   const editableRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -283,6 +286,13 @@ export default function GeneratePage() {
 
       const data = await res.json();
       if (data.refined_content) {
+        setContentHistory(prev => {
+          const newHistory = historyIndex === -1
+            ? [generatedContent, ...prev]
+            : [generatedContent, ...prev.slice(historyIndex)];
+          return newHistory.slice(0, 10);
+        });
+        setHistoryIndex(-1);
         setGeneratedContent(data.refined_content);
         setChatMessages(prev => [...prev, { role: 'assistant', content: '已根据您的意见修改完成' }]);
       } else {
@@ -294,6 +304,30 @@ export default function GeneratePage() {
       setLoading(false);
       setSelectedText('');
     }
+  };
+
+  const handleUndo = () => {
+    if (contentHistory.length === 0) return;
+    if (historyIndex === -1) {
+      setLatestVersion(generatedContent);
+    }
+    const newIndex = historyIndex + 1;
+    if (newIndex >= contentHistory.length) return;
+    setGeneratedContent(contentHistory[newIndex]);
+    setHistoryIndex(newIndex);
+    setChatMessages(prev => [...prev, { role: 'assistant', content: '已撤销到上一个版本' }]);
+  };
+
+  const handleRedo = () => {
+    if (historyIndex < 0) return;
+    const newIndex = historyIndex - 1;
+    if (newIndex === -1) {
+      setGeneratedContent(latestVersion);
+    } else {
+      setGeneratedContent(contentHistory[newIndex]);
+    }
+    setHistoryIndex(newIndex);
+    setChatMessages(prev => [...prev, { role: 'assistant', content: '已恢复到下一个版本' }]);
   };
 
   const handleDownload = async () => {
@@ -635,127 +669,157 @@ export default function GeneratePage() {
           </div>
 
           {/* 右列：预览和修改 */}
-          <div className="bg-white rounded-lg shadow">
-        <div className="p-6 max-h-[calc(100vh-12rem)] overflow-y-auto">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-bold">预览与修改</h2>
-              {generatedContent && (
-                <button
-                  onClick={() => {
-                    if (isEditing && editableRef.current) {
-                      const paragraphs = Array.from(editableRef.current.querySelectorAll('p'));
-                      const content = paragraphs.map(p => p.textContent || '').join('\n');
-                      setGeneratedContent(content);
-                    }
-                    setIsEditing(!isEditing);
-                  }}
-                  className="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded"
-                >
-                  {isEditing ? '预览' : '编辑'}
-                </button>
+          <div className="flex flex-col gap-6 h-full">
+            {/* 预览区域 */}
+            <div className="bg-white rounded-lg shadow">
+              <div className="p-6">
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-lg font-bold">预览</h2>
+                  {generatedContent && (
+                    <button
+                      onClick={() => {
+                        if (isEditing && editableRef.current) {
+                          const paragraphs = Array.from(editableRef.current.querySelectorAll('p'));
+                          const content = paragraphs.map(p => p.textContent || '').join('\n');
+                          setGeneratedContent(content);
+                        }
+                        setIsEditing(!isEditing);
+                      }}
+                      className="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded"
+                    >
+                      {isEditing ? '预览' : '编辑'}
+                    </button>
+                  )}
+                </div>
+                <div className="h-[600px] overflow-y-auto border rounded">
+              {generatedContent ? (
+                <>
+                  {isEditing ? (
+                    <div
+                      ref={editableRef}
+                      contentEditable
+                      suppressContentEditableWarning
+                      dangerouslySetInnerHTML={{
+                        __html: generatedContent.split('\n').filter(line => line.trim())
+                          .map(line => `<p class="indent-8" style="text-indent: 2em;">${line}</p>`)
+                          .join('')
+                      }}
+                      className="text-sm p-8 bg-white outline-none"
+                      style={{ lineHeight: '1.75' }}
+                    />
+                  ) : (
+                    <div
+                      className="text-sm p-8 select-text bg-white"
+                      onMouseUp={handleTextSelect}
+                      style={{ lineHeight: '1.75' }}
+                    >
+                      <div className="text-center font-bold text-xl mb-4">{formData.title || '未命名文档'}</div>
+                      <div className="h-7"></div>
+                      <div className="leading-7">{formData.recipient}：</div>
+                      <div className="leading-7">
+                        {generatedContent.split('\n').filter(line => line.trim()).map((line, i) => (
+                          <p key={i} className="indent-8">{line}</p>
+                        ))}
+                      </div>
+                      {attachments.length > 0 && (
+                        <>
+                          <div className="h-7"></div>
+                          <div className="leading-7">
+                            <span className="inline-block indent-8">附件：</span>
+                            <span className="inline">1. {attachments[0]}</span>
+                          </div>
+                          {attachments.slice(1).map((att, i) => (
+                            <div key={i} className="leading-7 pl-20">{i + 2}. {att}</div>
+                          ))}
+                          <div className="h-7"></div>
+                          <div className="h-7"></div>
+                        </>
+                      )}
+                      <div className="text-right leading-7 pr-8">{formData.issuer}</div>
+                      <div className="text-right leading-7 pr-8">{formData.date}</div>
+                      {formData.contactName && formData.contactPhone && (
+                        <>
+                          <div className="h-7"></div>
+                          <div className="text-center leading-7">
+                            （联系人：{formData.contactName}，电话：{formData.contactPhone}）
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="flex items-center justify-center h-full">
+                  <p className="text-gray-400">点击"生成公文"后，内容将显示在这里</p>
+                </div>
               )}
             </div>
-            {generatedContent ? (
-              <>
-                {isEditing ? (
-                  <div
-                    ref={editableRef}
-                    contentEditable
-                    suppressContentEditableWarning
-                    dangerouslySetInnerHTML={{
-                      __html: generatedContent.split('\n').filter(line => line.trim())
-                        .map(line => `<p class="indent-8" style="text-indent: 2em;">${line}</p>`)
-                        .join('')
-                    }}
-                    className="text-sm mb-4 border p-8 rounded flex-1 overflow-y-auto bg-white outline-none"
-                    style={{ lineHeight: '1.75' }}
-                  />
-                ) : (
-                  <div
-                    className="text-sm mb-4 border p-8 rounded flex-1 overflow-y-auto select-text bg-white"
-                    onMouseUp={handleTextSelect}
-                    style={{ lineHeight: '1.75' }}
-                  >
-                    <div className="text-center font-bold text-xl mb-4">{formData.title || '未命名文档'}</div>
-                    <div className="h-7"></div>
-                    <div className="leading-7">{formData.recipient}：</div>
-                    <div className="leading-7">
-                      {generatedContent.split('\n').filter(line => line.trim()).map((line, i) => (
-                        <p key={i} className="indent-8">{line}</p>
-                      ))}
-                    </div>
-                    {attachments.length > 0 && (
-                      <>
-                        <div className="h-7"></div>
-                        <div className="leading-7">
-                          <span className="inline-block indent-8">附件：</span>
-                          <span className="inline">1. {attachments[0]}</span>
-                        </div>
-                        {attachments.slice(1).map((att, i) => (
-                          <div key={i} className="leading-7 pl-20">{i + 2}. {att}</div>
-                        ))}
-                        <div className="h-7"></div>
-                        <div className="h-7"></div>
-                      </>
-                    )}
-                    <div className="text-right leading-7 pr-8">{formData.issuer}</div>
-                    <div className="text-right leading-7 pr-8">{formData.date}</div>
-                    {formData.contactName && formData.contactPhone && (
-                      <>
-                        <div className="h-7"></div>
-                        <div className="text-center leading-7">
-                          （联系人：{formData.contactName}，电话：{formData.contactPhone}）
-                        </div>
-                      </>
-                    )}
-                  </div>
-                )}
-                {selectedText && (
-                  <div className="text-xs text-blue-600 mb-2 p-2 bg-blue-50 rounded">
-                    已选择：{selectedText.substring(0, 50)}{selectedText.length > 50 ? '...' : ''}
-                  </div>
-                )}
-                <div className="border-t pt-4 space-y-3">
-                  <div className="max-h-32 overflow-y-auto space-y-2 mb-2">
-                    {chatMessages.map((msg, i) => (
-                      <div key={i} className={`text-xs p-2 rounded ${msg.role === 'user' ? 'bg-blue-50 text-right' : 'bg-gray-50'}`}>
-                        {msg.content}
-                      </div>
-                    ))}
-                  </div>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={userInput}
-                      onChange={(e) => setUserInput(e.target.value)}
-                      onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-                      placeholder={selectedText ? "对选中内容提出修改意见..." : "提出修改意见..."}
-                      className="flex-1 px-3 py-2 border rounded-md text-sm"
-                      disabled={loading}
-                    />
-                    <button
-                      onClick={handleSendMessage}
-                      disabled={loading || !userInput.trim()}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 text-sm"
-                    >
-                      发送
-                    </button>
-                  </div>
-                  <button
-                    onClick={handleDownload}
-                    disabled={loading}
-                    className="w-full bg-green-600 text-white py-2 rounded-md hover:bg-green-700 disabled:bg-gray-400"
-                  >
-                    {loading ? '生成中...' : '下载 Word 文档'}
-                  </button>
-                </div>
-              </>
-            ) : (
-              <p className="text-gray-400">点击"生成公文"后，内容将显示在这里</p>
-            )}
           </div>
         </div>
-        </div>
+
+            {/* AI 修改区域 */}
+        {generatedContent && (
+          <div className="bg-white rounded-lg shadow p-6">
+            <h2 className="text-lg font-bold mb-4">AI 修改</h2>
+            {selectedText && (
+              <div className="text-xs text-blue-600 mb-2 p-2 bg-blue-50 rounded">
+                已选择：{selectedText.substring(0, 50)}{selectedText.length > 50 ? '...' : ''}
+              </div>
+            )}
+            <div className="space-y-3">
+              <div className="max-h-32 overflow-y-auto space-y-2 mb-2">
+                {chatMessages.map((msg, i) => (
+                  <div key={i} className={`text-xs p-2 rounded ${msg.role === 'user' ? 'bg-blue-50 text-right' : 'bg-gray-50'}`}>
+                    {msg.content}
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-2 mb-2">
+                <button
+                  onClick={handleUndo}
+                  disabled={contentHistory.length === 0 || historyIndex >= contentHistory.length - 1}
+                  className="px-3 py-1 text-sm bg-gray-200 hover:bg-gray-300 disabled:bg-gray-100 disabled:text-gray-400 rounded"
+                >
+                  ↶ 撤销 {contentHistory.length > 0 && `(${contentHistory.length})`}
+                </button>
+                <button
+                  onClick={handleRedo}
+                  disabled={historyIndex < 0}
+                  className="px-3 py-1 text-sm bg-gray-200 hover:bg-gray-300 disabled:bg-gray-100 disabled:text-gray-400 rounded"
+                >
+                  ↷ 恢复
+                </button>
+              </div>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={userInput}
+                  onChange={(e) => setUserInput(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+                  placeholder={selectedText ? "对选中内容提出修改意见..." : "提出修改意见..."}
+                  className="flex-1 px-3 py-2 border rounded-md text-sm"
+                  disabled={loading}
+                />
+                <button
+                  onClick={handleSendMessage}
+                  disabled={loading || !userInput.trim()}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 text-sm"
+                >
+                  发送
+                </button>
+              </div>
+              <button
+                onClick={handleDownload}
+                disabled={loading}
+                className="w-full bg-green-600 text-white py-2 rounded-md hover:bg-green-700 disabled:bg-gray-400"
+              >
+                {loading ? '生成中...' : '下载 Word 文档'}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
       </div>
     </div>
   );
