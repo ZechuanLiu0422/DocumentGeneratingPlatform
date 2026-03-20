@@ -1,71 +1,95 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import { query, run } from '@/lib/db';
+import { NextRequest } from 'next/server';
+import { createRequestContext, handleRouteError, ok } from '@/lib/api';
+import { requireRouteUser } from '@/lib/auth';
+import { deleteIdSchema, draftSchema } from '@/lib/validation';
 
 export async function GET(request: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session) {
-    return NextResponse.json({ error: '未授权' }, { status: 401 });
-  }
+  const context = createRequestContext(request, '/api/drafts');
 
   try {
-    const drafts = await query<any>(
-      'SELECT * FROM drafts WHERE user_id = ? ORDER BY updated_at DESC',
-      [parseInt(session.user?.id || '1')]
-    );
-    const parsedDrafts = drafts.map(draft => ({
+    const { supabase, user } = await requireRouteUser();
+    context.userId = user.id;
+
+    const { data, error } = await supabase
+      .from('drafts')
+      .select('id, doc_type, title, recipient, content, issuer, date, provider, contact_name, contact_phone, attachments, updated_at')
+      .eq('user_id', user.id)
+      .order('updated_at', { ascending: false });
+
+    if (error) {
+      throw error;
+    }
+
+    const drafts = (data || []).map((draft) => ({
       ...draft,
-      attachments: draft.attachments ? JSON.parse(draft.attachments) : []
+      contactName: draft.contact_name,
+      contactPhone: draft.contact_phone,
     }));
-    return NextResponse.json({ drafts: parsedDrafts });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+
+    return ok(context, { drafts });
+  } catch (error) {
+    return handleRouteError(error, context);
   }
 }
 
 export async function POST(request: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session) {
-    return NextResponse.json({ error: '未授权' }, { status: 401 });
-  }
+  const context = createRequestContext(request, '/api/drafts');
 
   try {
-    const { id, docType, title, recipient, content, issuer, date, provider, contactName, contactPhone, attachments } = await request.json();
-    const userId = parseInt(session.user?.id || '1');
-    const attachmentsJson = JSON.stringify(attachments || []);
+    const { supabase, user } = await requireRouteUser();
+    context.userId = user.id;
+    const body = draftSchema.parse(await request.json());
+    const payload = {
+      user_id: user.id,
+      doc_type: body.docType,
+      title: body.title || null,
+      recipient: body.recipient || null,
+      content: body.content || null,
+      issuer: body.issuer || null,
+      date: body.date || null,
+      provider: body.provider,
+      contact_name: body.contactName || null,
+      contact_phone: body.contactPhone || null,
+      attachments: body.attachments,
+      updated_at: new Date().toISOString(),
+    };
 
-    let draftId = id;
-    if (id) {
-      await run(
-        'UPDATE drafts SET doc_type=?, title=?, recipient=?, content=?, issuer=?, date=?, provider=?, contactName=?, contactPhone=?, attachments=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND user_id=?',
-        [docType, title, recipient, content, issuer, date, provider, contactName, contactPhone, attachmentsJson, id, userId]
-      );
-    } else {
-      const result = await run(
-        'INSERT INTO drafts (user_id, doc_type, title, recipient, content, issuer, date, provider, contactName, contactPhone, attachments) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [userId, docType, title, recipient, content, issuer, date, provider, contactName, contactPhone, attachmentsJson]
-      );
-      draftId = result.lastID;
+    if (body.id) {
+      const { error } = await supabase.from('drafts').update(payload).eq('id', body.id).eq('user_id', user.id);
+      if (error) {
+        throw error;
+      }
+      return ok(context, { success: true, draftId: body.id });
     }
-    return NextResponse.json({ success: true, draftId });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+
+    const { data, error } = await supabase.from('drafts').insert(payload).select('id').single();
+
+    if (error) {
+      throw error;
+    }
+
+    return ok(context, { success: true, draftId: data.id }, 201);
+  } catch (error) {
+    return handleRouteError(error, context);
   }
 }
 
 export async function DELETE(request: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session) {
-    return NextResponse.json({ error: '未授权' }, { status: 401 });
-  }
+  const context = createRequestContext(request, '/api/drafts');
 
   try {
-    const { searchParams } = new URL(request.url);
-    const id = searchParams.get('id');
-    await run('DELETE FROM drafts WHERE id = ? AND user_id = ?', [id, parseInt(session.user?.id || '1')]);
-    return NextResponse.json({ success: true });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    const { supabase, user } = await requireRouteUser();
+    context.userId = user.id;
+    const params = deleteIdSchema.parse(Object.fromEntries(new URL(request.url).searchParams.entries()));
+
+    const { error } = await supabase.from('drafts').delete().eq('id', params.id).eq('user_id', user.id);
+
+    if (error) {
+      throw error;
+    }
+
+    return ok(context, { success: true });
+  } catch (error) {
+    return handleRouteError(error, context);
   }
 }

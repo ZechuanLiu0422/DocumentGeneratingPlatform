@@ -1,62 +1,84 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import path from 'path';
-import fs from 'fs';
-import { run } from '@/lib/db';
+import { NextRequest } from 'next/server';
+import { generateDocumentBuffer } from '@/lib/document-generator';
+import { createRequestContext, handleRouteError, ok } from '@/lib/api';
+import { requireRouteUser } from '@/lib/auth';
+import { enforceDailyQuota, recordUsageEvent } from '@/lib/quota';
+import { enforceRateLimit } from '@/lib/ratelimit';
+import { generateSchema } from '@/lib/validation';
 
-const execAsync = promisify(exec);
+export const runtime = 'nodejs';
+export const maxDuration = 60;
+
+function sanitizeTitle(title: string) {
+  return title.replace(/[\/\\:*?"<>|]/g, '_').trim() || 'document';
+}
 
 export async function POST(request: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session) {
-    return NextResponse.json({ error: '未授权' }, { status: 401 });
-  }
+  const context = createRequestContext(request, '/api/generate');
 
   try {
-    const { docType, title, recipient, content, issuer, date, generatedContent, provider, attachments, contactName, contactPhone } = await request.json();
+    const { supabase, user } = await requireRouteUser();
+    context.userId = user.id;
+    const body = generateSchema.parse(await request.json());
+    context.provider = body.provider;
 
-    const templatePath = path.join(process.cwd(), 'templates', `${docType}.json`);
-    const sanitizedTitle = title.replace(/[\/\\:*?"<>|]/g, '_');
-    const outputPath = path.join(process.cwd(), '.tmp', `${sanitizedTitle}.docx`);
+    enforceRateLimit(`generate:${user.id}`, 8, 60 * 1000, '导出过于频繁，请稍后再试');
+    await enforceDailyQuota(supabase, user.id, 'generate');
 
-    const contentData = JSON.stringify({
-      title,
-      recipient,
-      content: generatedContent,
-      issuer,
-      date,
-      attachments: attachments || [],
-      contactName: contactName || '',
-      contactPhone: contactPhone || ''
+    const fileBuffer = await generateDocumentBuffer(body.docType, {
+      title: body.title,
+      recipient: body.recipient,
+      content: body.generatedContent,
+      issuer: body.issuer,
+      date: body.date,
+      attachments: body.attachments,
+      contactName: body.contactName,
+      contactPhone: body.contactPhone,
     });
 
-    const cmd = `python3 tools/generate_docx.py --template "${templatePath}" --content '${contentData}' --output "${outputPath}"`;
+    const { error } = await supabase.from('documents').insert({
+      user_id: user.id,
+      doc_type: body.docType,
+      title: body.title,
+      recipient: body.recipient,
+      user_input: body.content,
+      generated_content: body.generatedContent,
+      ai_provider: body.provider,
+      issuer: body.issuer,
+      doc_date: body.date,
+      attachments: body.attachments,
+      contact_name: body.contactName || null,
+      contact_phone: body.contactPhone || null,
+    });
 
-    const { stdout } = await execAsync(cmd);
-    const result = JSON.parse(stdout);
-
-    if (result.success) {
-      await run(`
-        INSERT INTO documents (user_id, doc_type, title, recipient, user_input, generated_content, ai_provider, issuer, doc_date, file_path)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `, [parseInt(session.user?.id || '1'), docType, title, recipient, content, generatedContent, provider, issuer, date, result.file_path]);
-
-      const fileBuffer = fs.readFileSync(result.file_path);
-      const base64 = fileBuffer.toString('base64');
-
-      return NextResponse.json({
-        success: true,
-        file_path: result.file_path,
-        file_data: base64,
-        file_name: path.basename(result.file_path)
-      });
+    if (error) {
+      throw error;
     }
 
-    return NextResponse.json(result);
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    await recordUsageEvent(supabase, {
+      userId: user.id,
+      action: 'generate',
+      provider: body.provider,
+      status: 'success',
+    });
+
+    return ok(context, {
+      success: true,
+      file_data: fileBuffer.toString('base64'),
+      file_name: `${sanitizeTitle(body.title)}.docx`,
+    });
+  } catch (error) {
+    try {
+      const { supabase, user } = await requireRouteUser();
+      const provider = context.provider as string | undefined;
+      await recordUsageEvent(supabase, {
+        userId: user.id,
+        action: 'generate',
+        provider,
+        status: 'failed',
+      });
+    } catch {}
+
+    return handleRouteError(error, context);
   }
 }

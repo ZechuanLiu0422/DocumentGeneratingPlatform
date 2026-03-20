@@ -1,46 +1,17 @@
-import { NextAuthOptions } from 'next-auth';
-import CredentialsProvider from 'next-auth/providers/credentials';
-import bcrypt from 'bcryptjs';
-import { query } from './db';
+import { NextResponse } from 'next/server';
+import { AppError } from '@/lib/api';
+import { createServerSupabaseClient } from '@/lib/supabase/server';
 
-export const authOptions: NextAuthOptions = {
-  providers: [
-    CredentialsProvider({
-      name: 'Credentials',
-      credentials: {
-        username: { label: "用户名", type: "text" },
-        password: { label: "密码", type: "password" }
-      },
-      async authorize(credentials) {
-        if (!credentials?.username || !credentials?.password) {
-          return null;
-        }
+export async function requireRouteUser(response = NextResponse.next()) {
+  const supabase = createServerSupabaseClient(response);
+  const {
+    data: { user },
+    error,
+  } = await supabase.auth.getUser();
 
-        const users = await query<any>('SELECT * FROM users WHERE username = ?', [credentials.username]);
-
-        if (!users.length) {
-          return null;
-        }
-
-        const user = users[0];
-
-        const isValid = await bcrypt.compare(credentials.password, user.password_hash);
-        if (!isValid) {
-          return null;
-        }
-
-        return {
-          id: user.id.toString(),
-          name: user.display_name || user.username,
-          email: user.username
-        };
-      }
-    })
-  ],
-  session: {
-    strategy: 'jwt'
-  },
-  pages: {
-    signIn: '/login'
+  if (error || !user) {
+    throw new AppError(401, '登录状态已失效，请重新登录', 'UNAUTHORIZED');
   }
-};
+
+  return { supabase, user, response };
+}

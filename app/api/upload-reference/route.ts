@@ -1,56 +1,60 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import path from 'path';
-import fs from 'fs';
+import { NextRequest } from 'next/server';
+import { createRequestContext, handleRouteError, ok } from '@/lib/api';
+import { requireRouteUser } from '@/lib/auth';
+import { parseReferenceFile } from '@/lib/file-parser';
+import { enforceDailyQuota, recordUsageEvent } from '@/lib/quota';
+import { enforceRateLimit } from '@/lib/ratelimit';
+import { uploadDocTypeSchema } from '@/lib/validation';
 
-const execAsync = promisify(exec);
+export const runtime = 'nodejs';
+export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session) {
-    return NextResponse.json({ error: '未授权' }, { status: 401 });
-  }
+  const context = createRequestContext(request, '/api/upload-reference');
 
   try {
+    const { supabase, user } = await requireRouteUser();
+    context.userId = user.id;
+
+    enforceRateLimit(`upload-reference:${user.id}`, 10, 60 * 1000, '上传过于频繁，请稍后再试');
+    await enforceDailyQuota(supabase, user.id, 'upload_reference');
+
     const formData = await request.formData();
-    const file = formData.get('file') as File;
-    const docType = formData.get('docType') as string;
+    const file = formData.get('file');
+    const docType = uploadDocTypeSchema.parse({ docType: formData.get('docType') }).docType;
 
-    if (!file) {
-      return NextResponse.json({ error: '未提供文件' }, { status: 400 });
+    if (!(file instanceof File)) {
+      throw new Error('未提供文件');
     }
 
-    const allowedExts = ['docx', 'pdf', 'txt'];
-    const ext = file.name.split('.').pop()?.toLowerCase();
-    if (!ext || !allowedExts.includes(ext)) {
-      return NextResponse.json({ error: '不支持的文件格式，仅支持 .docx, .pdf, .txt' }, { status: 400 });
-    }
+    const arrayBuffer = await file.arrayBuffer();
+    const result = await parseReferenceFile(file.name, Buffer.from(arrayBuffer));
 
-    const buffer = await file.arrayBuffer();
-    const tempPath = path.join(process.cwd(), '.tmp', `ref_${Date.now()}_${file.name}`);
-    fs.writeFileSync(tempPath, Buffer.from(buffer));
+    await recordUsageEvent(supabase, {
+      userId: user.id,
+      action: 'upload_reference',
+      status: 'success',
+    });
 
-    const cmd = `python3 tools/parse_document.py --file "${tempPath}"`;
-    const { stdout } = await execAsync(cmd);
-    const result = JSON.parse(stdout);
-
-    fs.unlinkSync(tempPath);
-
-    if (result.success) {
-      return NextResponse.json({
-        success: true,
-        fileId: `ref_${Date.now()}`,
-        content: result.content,
-        wordCount: result.wordCount,
-        fileName: file.name
+    return ok(context, {
+      success: true,
+      fileId: crypto.randomUUID(),
+      fileName: file.name,
+      docType,
+      content: result.content,
+      wordCount: result.wordCount,
+      pageCount: result.pageCount || null,
+    });
+  } catch (error) {
+    try {
+      const { supabase, user } = await requireRouteUser();
+      await recordUsageEvent(supabase, {
+        userId: user.id,
+        action: 'upload_reference',
+        status: 'failed',
       });
-    } else {
-      return NextResponse.json({ error: result.error }, { status: 500 });
-    }
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    } catch {}
+
+    return handleRouteError(error, context);
   }
 }

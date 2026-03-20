@@ -1,111 +1,195 @@
 # DocumentGeneratingPlatform
 
-An AI-powered Chinese official document generation platform built with Next.js and Python that helps users create standardized government documents compliant with GB/T 9704-2012 standards, featuring intelligent content generation, real-time preview/editing, draft management, and automated Word document export with proper formatting.
+基于 `Next.js 14 + Supabase + Vercel` 的智能公文生成平台，支持通知、函、请示、报告四类公文的 AI 生成、仿写分析、草稿管理、历史记录与 Word 导出。
 
----
+## 当前架构
 
-# 公文生成平台
+- 前端：Next.js App Router + React + Tailwind CSS
+- 认证：Supabase Auth
+- 数据库：Supabase Postgres + RLS
+- AI：平台统一管理 Claude / OpenAI / 豆包 / GLM 密钥
+- 导出：Node.js 侧内存生成 Word 文档
+- 部署：Vercel
 
-基于 WAT 框架（Workflows, Agents, Tools）的智能公文生成系统。
+## 主要变化
 
-## ✅ 项目已完成并可交付
+- 不再使用本地 SQLite
+- 不再使用 NextAuth
+- 不再使用 Python 子进程处理 AI、上传解析和 Word 导出
+- 用户不再自行保存 API Key，所有 AI Key 只保存在服务端环境变量
 
-所有核心功能已实现，系统可以正常使用。
-
-## 功能特性
-
-- **智能公文生成**：支持通知、函、请示、报告四种公文类型
-- **AI 润色**：集成 Claude 和 OpenAI，自动将自然语言转换为规范公文格式
-- **极简输入**：只需填写 5 个字段（标题、主送机关、内容、发文机关、日期）
-- **国标格式**：严格遵循 GB/T 9704-2012《党政机关公文格式》标准
-- **Word 导出**：自动生成符合规范的 Word 文档
-- **历史记录**：保存所有生成的公文记录
-- **用户认证**：基于 NextAuth.js 的安全登录系统
-
-## 快速开始
+## 本地开发
 
 ### 1. 安装依赖
 
 ```bash
 npm install
-pip3 install -r requirements.txt
 ```
 
 ### 2. 配置环境变量
 
-编辑 `.env` 文件，填入你的 API keys：
+复制 `.env.example` 为 `.env`，并填写：
 
 ```bash
-# AI API Keys（至少配置一个）
-CLAUDE_API_KEY=your-claude-api-key-here
-OPENAI_API_KEY=your-openai-api-key-here
+NEXT_PUBLIC_SUPABASE_URL=...
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+SUPABASE_SERVICE_ROLE_KEY=...
 
-# NextAuth
-NEXTAUTH_URL=http://localhost:3000
-NEXTAUTH_SECRET=your-random-secret-here
+CLAUDE_API_KEY=...
+CLAUDE_MODEL=claude-3-5-sonnet-latest
+
+OPENAI_API_KEY=...
+OPENAI_MODEL=gpt-4o-mini
 ```
 
-### 3. 初始化数据库
+可选 provider：
 
 ```bash
-python3 init_db.py --init
-python3 init_db.py --create-user admin password123
+DOUBAO_API_KEY=...
+DOUBAO_MODEL=...
+GLM_API_KEY=...
+GLM_MODEL=glm-4-flash
 ```
 
-### 4. 启动服务
+### 3. 初始化 Supabase
+
+在 Supabase SQL Editor 或 Supabase CLI 中执行：
+
+```sql
+supabase/migrations/20260320120000_initial_schema.sql
+```
+
+这会创建：
+
+- `profiles`
+- `documents`
+- `drafts`
+- `contacts`
+- `common_phrases`
+- `usage_events`
+
+并自动启用 RLS。
+
+如果你打算使用 Supabase CLI，本仓库已提供基础配置：
+
+```bash
+supabase/config.toml
+```
+
+### 4. 创建测试账号
+
+本项目首版默认使用“管理员邀请 / 手动开通”模式。
+
+你可以在 Supabase Dashboard 中：
+
+1. 进入 `Authentication > Users`
+2. 手动创建用户，或发送邀请
+3. 用该邮箱和密码登录系统
+
+### 5. 启动项目
 
 ```bash
 npm run dev
 ```
 
-访问 http://localhost:3000
+访问：
 
-## 使用说明
-
-### 登录
-- 用户名：admin
-- 密码：password123
-
-### 生成公文
-
-1. 登录后选择公文类型（通知、函、请示、报告）
-2. 填写 5 个必填字段：
-   - **标题**：例如"关于召开年度总结会议的通知"
-   - **主送机关**：例如"各部门、各单位"
-   - **主要内容**：用自然语言描述完整内容，AI 会自动提取背景、事项、细节等信息
-   - **发文机关**：例如"XX单位办公室"
-   - **成文日期**：选择日期
-3. 选择 AI 提供商（Claude 或 OpenAI）
-4. 点击"生成公文"查看 AI 润色后的内容
-5. 点击"下载 Word 文档"获取规范格式的文档
-
-### 查看历史
-
-点击"历史记录"可查看所有已生成的公文。
-
-## 技术栈
-
-- **前端**: Next.js 14 + React + Tailwind CSS
-- **后端**: Next.js API Routes + Python Tools
-- **数据库**: SQLite (sql.js)
-- **AI**: Claude API / OpenAI API
-- **文档生成**: python-docx
-- **认证**: NextAuth.js
-
-## 架构说明
-
-```
-用户界面 (React)
-    ↓
-Next.js API Routes (薄层路由)
-    ↓
-Python Tools (核心逻辑)
-    ↓
-[SQLite | AI APIs | Word 生成]
+```text
+http://localhost:3000
 ```
 
-## 注意事项
+也可以直接双击：
 
-1. **API Keys**：使用前必须配置至少一个 AI API key
-2. **字体**：Word 文档使用方正小标宋和仿宋_GB2312
-3. **生产部署**：修改 NEXTAUTH_SECRET 为随机字符串
+- macOS: `start.command`
+- Windows: `start.bat`
+
+### 6. 本地部署检查
+
+```bash
+npm run check:deploy
+```
+
+这个脚本会检查：
+
+- `.env` 是否存在
+- Supabase 关键环境变量是否已填写
+- 是否至少启用了一个平台 AI Provider
+- migration 文件是否存在
+
+### 7. 管理员创建用户
+
+如果你想通过命令行快速创建首批账号：
+
+```bash
+npm run invite:user -- user@example.com ZhangSan Temp#123456
+```
+
+如果不传显示名和临时密码，脚本会自动生成。
+通过该脚本创建的账号会默认开启 `must_change_password`，首次登录后会被强制跳转到修改密码页。
+
+## Vercel 部署
+
+### 1. 导入项目到 Vercel
+
+将仓库连接到 Vercel。
+
+### 2. 配置环境变量
+
+在 Vercel Project Settings 中配置：
+
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `CLAUDE_API_KEY`
+- `CLAUDE_MODEL`
+- `OPENAI_API_KEY`
+- `OPENAI_MODEL`
+- 可选的 `DOUBAO_API_KEY` / `DOUBAO_MODEL`
+- 可选的 `GLM_API_KEY` / `GLM_MODEL`
+
+### 3. 配置 Supabase
+
+- 执行 `supabase/migrations/20260320120000_initial_schema.sql`
+- 在 `Authentication` 中创建或邀请首批用户
+- 检查 RLS 策略是否生效
+
+### 4. 预发布检查
+
+- 受保护页面未登录时会跳转 `/login`
+- 首次登录且带临时密码的用户会被强制跳转 `/change-password`
+- 登录成功后可访问首页、生成页、设置页、历史页
+- 草稿、联系人、常用短语、历史记录都按用户隔离
+- 参考文件上传限制、AI 调用限流和日额度生效
+- 前端与 API 不返回任何 AI Key 明文
+- `/api/health` 可用于部署后基础健康检查
+
+更完整清单见：
+
+- [DEPLOYMENT_CHECKLIST.md](/Users/agent/Desktop/ClaudeCodeTesting/DocuGeneratingPlatform/DEPLOYMENT_CHECKLIST.md)
+
+## 安全与稳定性基线
+
+已实现：
+
+- Supabase Auth 取代本地账号体系
+- 业务数据按 `user_id` 启用 RLS
+- 高成本接口增加频率限制和日额度限制
+- 所有关键 API 增加 `zod` 入参校验
+- 统一错误脱敏与结构化日志
+- 上传文件类型、大小、内容长度、PDF 页数限制
+- 平台统一 AI Key，不落库、不回显、不传前端
+
+## 目录说明
+
+- `app/api/*`: 业务 API
+- `lib/supabase/*`: Supabase SSR 客户端与中间件
+- `lib/official-document-ai.ts`: AI 提示词与多 provider 调用
+- `lib/document-generator.ts`: Word 导出
+- `lib/file-parser.ts`: `.docx/.pdf/.txt` 内容解析
+- `supabase/migrations/*`: 数据库初始化 SQL
+
+## 后续可选增强
+
+- 接入 Supabase Storage 保存历史导出文件
+- 增加管理员后台与邀请流程页面
+- 增加更强的审计日志与外部监控
+- 增加密码重置与首次登录引导

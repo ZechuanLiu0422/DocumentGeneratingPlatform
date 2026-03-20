@@ -1,42 +1,52 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import { query } from '@/lib/db';
+import { NextRequest } from 'next/server';
+import { analyzeReferenceStyle } from '@/lib/official-document-ai';
+import { createRequestContext, handleRouteError, ok } from '@/lib/api';
+import { requireRouteUser } from '@/lib/auth';
+import { enforceDailyQuota, recordUsageEvent } from '@/lib/quota';
+import { enforceRateLimit } from '@/lib/ratelimit';
+import { analyzeReferenceSchema } from '@/lib/validation';
 
-const execAsync = promisify(exec);
+export const runtime = 'nodejs';
+export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session) {
-    return NextResponse.json({ error: '未授权' }, { status: 401 });
-  }
+  const context = createRequestContext(request, '/api/analyze-reference');
 
   try {
-    const { docType, fileContent, provider } = await request.json();
+    const { supabase, user } = await requireRouteUser();
+    context.userId = user.id;
+    const body = analyzeReferenceSchema.parse(await request.json());
+    context.provider = body.provider;
 
-    if (!docType || !fileContent || !provider) {
-      return NextResponse.json({ error: '缺少必要参数' }, { status: 400 });
-    }
+    enforceRateLimit(`analyze-reference:${user.id}`, 10, 60 * 1000, '分析过于频繁，请稍后再试');
+    await enforceDailyQuota(supabase, user.id, 'analyze_reference');
 
-    const userId = parseInt(session.user?.id || '1');
-    const configs = await query<any>('SELECT * FROM ai_configs WHERE user_id = ? AND provider = ?', [userId, provider]);
+    const analysis = await analyzeReferenceStyle({
+      docType: body.docType,
+      content: body.fileContent,
+      provider: body.provider,
+    });
 
-    if (configs.length === 0) {
-      return NextResponse.json({ error: `未配置 ${provider} API Key` }, { status: 400 });
-    }
+    await recordUsageEvent(supabase, {
+      userId: user.id,
+      action: 'analyze_reference',
+      provider: body.provider,
+      status: 'success',
+    });
 
-    const apiKey = configs[0].api_key;
-    const contentEscaped = fileContent.replace(/'/g, "'\\''");
+    return ok(context, { success: true, analysis });
+  } catch (error) {
+    try {
+      const { supabase, user } = await requireRouteUser();
+      const provider = context.provider as string | undefined;
+      await recordUsageEvent(supabase, {
+        userId: user.id,
+        action: 'analyze_reference',
+        provider,
+        status: 'failed',
+      });
+    } catch {}
 
-    const cmd = `python3 tools/analyze_style.py --doc-type "${docType}" --content '${contentEscaped}' --provider "${provider}" --api-key "${apiKey}"`;
-
-    const { stdout } = await execAsync(cmd, { maxBuffer: 1024 * 1024 * 10 });
-    const result = JSON.parse(stdout);
-
-    return NextResponse.json(result);
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return handleRouteError(error, context);
   }
 }

@@ -1,50 +1,61 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import { query } from '@/lib/db';
+import { NextRequest } from 'next/server';
+import { generateDocument } from '@/lib/official-document-ai';
+import { createRequestContext, handleRouteError, ok } from '@/lib/api';
+import { requireRouteUser } from '@/lib/auth';
+import { enforceDailyQuota, recordUsageEvent } from '@/lib/quota';
+import { enforceRateLimit } from '@/lib/ratelimit';
+import { polishSchema } from '@/lib/validation';
 
-const execAsync = promisify(exec);
+export const runtime = 'nodejs';
+export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session) {
-    return NextResponse.json({ error: '未授权' }, { status: 401 });
-  }
+  const context = createRequestContext(request, '/api/polish');
 
   try {
-    const { docType, title, recipient, content, provider, attachments, referenceAnalysis, imitationStrength } = await request.json();
+    const { supabase, user } = await requireRouteUser();
+    context.userId = user.id;
+    const body = polishSchema.parse(await request.json());
+    context.provider = body.provider;
 
-    const rows = await query<any>('SELECT api_key FROM ai_configs WHERE user_id = ? AND provider = ?', [parseInt(session.user?.id || '1'), provider]);
+    enforceRateLimit(`polish:${user.id}`, 10, 60 * 1000, '生成过于频繁，请稍后再试');
+    await enforceDailyQuota(supabase, user.id, 'polish');
 
-    if (!rows.length) {
-      return NextResponse.json({ error: `请先在设置中配置 ${provider} API Key` }, { status: 400 });
-    }
+    const result = await generateDocument({
+      docType: body.docType,
+      recipient: body.recipient,
+      content: body.content,
+      provider: body.provider,
+      title: body.title,
+      attachments: body.attachments,
+      referenceAnalysis: body.referenceAnalysis || undefined,
+      imitationStrength: body.imitationStrength,
+    });
 
-    const apiKey = rows[0].api_key;
+    await recordUsageEvent(supabase, {
+      userId: user.id,
+      action: 'polish',
+      provider: body.provider,
+      status: 'success',
+    });
 
-    const cleanTitle = title ? title.replace(/[`'"\\]/g, '') : '';
+    return ok(context, {
+      success: true,
+      generated_title: result.title,
+      generated_content: result.content,
+    });
+  } catch (error) {
+    try {
+      const { supabase, user } = await requireRouteUser();
+      const provider = context.provider as string | undefined;
+      await recordUsageEvent(supabase, {
+        userId: user.id,
+        action: 'polish',
+        provider,
+        status: 'failed',
+      });
+    } catch {}
 
-    const attachmentsParam = attachments && attachments.length > 0
-      ? ` --attachments '${JSON.stringify(attachments).replace(/'/g, "\\'")}'`
-      : '';
-
-    const referenceParam = referenceAnalysis
-      ? ` --reference-analysis '${JSON.stringify(referenceAnalysis).replace(/'/g, "\\'")}'`
-      : '';
-
-    const strengthParam = imitationStrength
-      ? ` --imitation-strength "${imitationStrength}"`
-      : '';
-
-    const cmd = `python3 tools/polish_text.py --doc-type "${docType}" --recipient "${recipient}" --content "${content.replace(/"/g, '\\"')}" --provider "${provider}" --api-key "${apiKey}"${cleanTitle ? ` --title "${cleanTitle}"` : ''}${attachmentsParam}${referenceParam}${strengthParam}`;
-
-    const { stdout } = await execAsync(cmd);
-    const polishResult = JSON.parse(stdout);
-
-    return NextResponse.json(polishResult);
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return handleRouteError(error, context);
   }
 }

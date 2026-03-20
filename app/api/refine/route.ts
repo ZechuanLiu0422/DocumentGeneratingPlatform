@@ -1,36 +1,57 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import { query } from '@/lib/db';
+import { NextRequest } from 'next/server';
+import { refineGeneratedContent } from '@/lib/official-document-ai';
+import { createRequestContext, handleRouteError, ok } from '@/lib/api';
+import { requireRouteUser } from '@/lib/auth';
+import { enforceDailyQuota, recordUsageEvent } from '@/lib/quota';
+import { enforceRateLimit } from '@/lib/ratelimit';
+import { refineSchema } from '@/lib/validation';
 
-const execAsync = promisify(exec);
+export const runtime = 'nodejs';
+export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session) {
-    return NextResponse.json({ error: '未授权' }, { status: 401 });
-  }
+  const context = createRequestContext(request, '/api/refine');
 
   try {
-    const { docType, recipient, originalContent, userFeedback, provider } = await request.json();
+    const { supabase, user } = await requireRouteUser();
+    context.userId = user.id;
+    const body = refineSchema.parse(await request.json());
+    context.provider = body.provider;
 
-    const rows = await query<any>('SELECT api_key FROM ai_configs WHERE user_id = ? AND provider = ?', [parseInt(session.user?.id || '1'), provider]);
+    enforceRateLimit(`refine:${user.id}`, 12, 60 * 1000, '修改过于频繁，请稍后再试');
+    await enforceDailyQuota(supabase, user.id, 'refine');
 
-    if (!rows.length) {
-      return NextResponse.json({ error: `请先在设置中配置 ${provider} API Key` }, { status: 400 });
-    }
+    const refinedContent = await refineGeneratedContent({
+      docType: body.docType,
+      recipient: body.recipient,
+      originalContent: body.originalContent,
+      userFeedback: body.userFeedback,
+      provider: body.provider,
+    });
 
-    const apiKey = rows[0].api_key;
+    await recordUsageEvent(supabase, {
+      userId: user.id,
+      action: 'refine',
+      provider: body.provider,
+      status: 'success',
+    });
 
-    const cmd = `python3 tools/refine_text.py --doc-type "${docType}" --recipient "${recipient}" --original "${originalContent.replace(/"/g, '\\"')}" --feedback "${userFeedback.replace(/"/g, '\\"')}" --provider "${provider}" --api-key "${apiKey}"`;
+    return ok(context, {
+      success: true,
+      refined_content: refinedContent,
+    });
+  } catch (error) {
+    try {
+      const { supabase, user } = await requireRouteUser();
+      const provider = context.provider as string | undefined;
+      await recordUsageEvent(supabase, {
+        userId: user.id,
+        action: 'refine',
+        provider,
+        status: 'failed',
+      });
+    } catch {}
 
-    const { stdout } = await execAsync(cmd);
-    const result = JSON.parse(stdout);
-
-    return NextResponse.json(result);
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return handleRouteError(error, context);
   }
 }
