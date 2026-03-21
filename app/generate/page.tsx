@@ -86,6 +86,16 @@ function GeneratePageContent() {
   const [contentHistory, setContentHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [latestVersion, setLatestVersion] = useState('');
+  const [savingPhraseType, setSavingPhraseType] = useState<Phrase['type'] | null>(null);
+
+  const fetchPhrases = async () => {
+    const response = await fetch('/api/common-phrases');
+    const data = await response.json();
+
+    if (response.ok) {
+      setPhrases(data.phrases || []);
+    }
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -236,6 +246,47 @@ function GeneratePageContent() {
       const contactsData = await contactsRes.json();
       setContacts(contactsData.contacts || []);
       alert('联系人已保存');
+    }
+  };
+
+  const handleSavePhrase = async (type: Phrase['type']) => {
+    const value = (type === 'recipient' ? formData.recipient : formData.issuer).trim();
+
+    if (!value) {
+      alert(type === 'recipient' ? '请先填写主送机关' : '请先填写发文机关');
+      return;
+    }
+
+    const alreadyExists = phrases.some((phrase) => phrase.type === type && phrase.phrase === value);
+    if (alreadyExists) {
+      alert('这条常用信息已存在');
+      return;
+    }
+
+    setSavingPhraseType(type);
+
+    try {
+      const response = await fetch('/api/common-phrases', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type,
+          phrase: value,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || '保存失败');
+      }
+
+      await fetchPhrases();
+      alert(type === 'recipient' ? '主送机关已保存到常用信息' : '发文机关已保存到常用信息');
+    } catch (error: any) {
+      alert(error.message || '保存失败');
+    } finally {
+      setSavingPhraseType(null);
     }
   };
 
@@ -552,6 +603,13 @@ function GeneratePageContent() {
                       className="w-full px-3 py-2 border rounded-md"
                       placeholder="例如：各部门、各单位"
                     />
+                    <button
+                      onClick={() => handleSavePhrase('recipient')}
+                      disabled={savingPhraseType === 'recipient'}
+                      className="mt-2 text-sm text-blue-600 hover:underline disabled:text-gray-400 disabled:no-underline"
+                    >
+                      保存到常用信息
+                    </button>
                     <datalist id="recipient-list">
                       {phrases
                         .filter((phrase) => phrase.type === 'recipient')
@@ -582,6 +640,13 @@ function GeneratePageContent() {
                       className="w-full px-3 py-2 border rounded-md"
                       placeholder="例如：XX单位办公室"
                     />
+                    <button
+                      onClick={() => handleSavePhrase('issuer')}
+                      disabled={savingPhraseType === 'issuer'}
+                      className="mt-2 text-sm text-blue-600 hover:underline disabled:text-gray-400 disabled:no-underline"
+                    >
+                      保存到常用信息
+                    </button>
                     <datalist id="issuer-list">
                       {phrases
                         .filter((phrase) => phrase.type === 'issuer')

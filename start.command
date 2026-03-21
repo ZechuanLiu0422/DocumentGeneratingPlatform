@@ -4,7 +4,13 @@ set -e
 
 cd "$(dirname "$0")"
 
-APP_URL="http://127.0.0.1:3000"
+PORT=3000
+
+while lsof -iTCP:"$PORT" -sTCP:LISTEN >/dev/null 2>&1; do
+  PORT=$((PORT + 1))
+done
+
+APP_URL="http://127.0.0.1:$PORT"
 
 echo "========================================"
 echo "  DocuGeneratingPlatform Quick Start"
@@ -24,6 +30,9 @@ fi
 
 echo "[STEP] 安装 Node.js 依赖..."
 npm install
+
+echo "[STEP] 清理本地开发缓存..."
+rm -rf .next
 
 echo
 echo "========================================"
@@ -51,4 +60,4 @@ echo
   done
 ) &
 
-npm run dev
+PORT="$PORT" npm run dev -- --port "$PORT"
