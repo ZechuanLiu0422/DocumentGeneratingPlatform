@@ -5,7 +5,7 @@ import path from 'node:path';
 
 const rootDir = process.cwd();
 const envPath = path.join(rootDir, '.env');
-const migrationPath = path.join(rootDir, 'supabase', 'migrations', '20260320120000_initial_schema.sql');
+const migrationDir = path.join(rootDir, 'supabase', 'migrations');
 
 const requiredEnv = [
   'NEXT_PUBLIC_SUPABASE_URL',
@@ -67,7 +67,14 @@ if (!env.SUPABASE_SERVICE_ROLE_KEY) {
   warnings.push('未配置 SUPABASE_SERVICE_ROLE_KEY。管理员邀请脚本无法使用，但应用运行本身不受影响。');
 }
 
-if (!fs.existsSync(migrationPath)) {
+const migrationFiles = fs.existsSync(migrationDir)
+  ? fs
+      .readdirSync(migrationDir)
+      .filter((file) => file.endsWith('.sql'))
+      .sort()
+  : [];
+
+if (migrationFiles.length === 0) {
   issues.push('缺少 Supabase migration 文件，无法初始化数据库。');
 }
 
@@ -88,7 +95,12 @@ if (enabledProviders.length > 0) {
 }
 
 printSection('Supabase');
-console.log(fs.existsSync(migrationPath) ? '已检测到 migration 文件。' : '未检测到 migration 文件。');
+if (migrationFiles.length > 0) {
+  console.log(`已检测到 ${migrationFiles.length} 个 migration 文件。`);
+  migrationFiles.forEach((file) => console.log(`- ${file}`));
+} else {
+  console.log('未检测到 migration 文件。');
+}
 
 if (warnings.length > 0) {
   printSection('Warnings');
@@ -102,7 +114,7 @@ if (issues.length > 0) {
 } else {
   printSection('Success');
   console.log('部署前本地检查通过。接下来请确认：');
-  console.log('- Supabase 已执行 migration');
+  console.log('- Supabase 已按顺序执行 supabase/migrations/ 下的全部 migration');
   console.log('- Supabase Auth 已创建或邀请首批用户');
   console.log('- Vercel Preview / Production 环境变量已分别配置');
 }

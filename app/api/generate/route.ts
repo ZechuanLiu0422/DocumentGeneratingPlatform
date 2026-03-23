@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { generateDocumentBuffer } from '@/lib/document-generator';
 import { createRequestContext, handleRouteError, ok } from '@/lib/api';
 import { requireRouteUser } from '@/lib/auth';
+import { createVersionSnapshot, getDraftById, saveDraftState } from '@/lib/collaborative-store';
 import { enforceDailyQuota, recordUsageEvent } from '@/lib/quota';
 import { enforceRateLimit } from '@/lib/ratelimit';
 import { generateSchema } from '@/lib/validation';
@@ -61,6 +62,49 @@ export async function POST(request: NextRequest) {
       provider: body.provider,
       status: 'success',
     });
+
+    if (body.draftId) {
+      const draft = await getDraftById(supabase, user.id, body.draftId);
+      await saveDraftState(supabase, {
+        userId: user.id,
+        draftId: draft.id,
+        docType: draft.doc_type,
+        provider: draft.provider,
+        baseFields: {
+          title: body.title,
+          recipient: body.recipient,
+          content: body.content,
+          issuer: body.issuer,
+          date: body.date,
+          contact_name: body.contactName,
+          contact_phone: body.contactPhone,
+          attachments: body.attachments,
+        },
+        workflow: {
+          workflow_stage: 'done',
+          collected_facts: draft.collected_facts,
+          missing_fields: draft.missing_fields,
+          planning: draft.planning,
+          outline: draft.outline,
+          sections: body.sections.length > 0 ? body.sections : draft.sections,
+          active_rule_ids: draft.active_rule_ids,
+          active_reference_ids: draft.active_reference_ids,
+          generated_title: body.title,
+          generated_content: body.generatedContent,
+          version_count: draft.version_count,
+        },
+      });
+
+      await createVersionSnapshot(supabase, {
+        userId: user.id,
+        draftId: draft.id,
+        stage: 'exported',
+        title: body.title,
+        content: body.generatedContent,
+        sections: body.sections.length > 0 ? body.sections : draft.sections,
+        changeSummary: '已导出 Word 定稿',
+      });
+    }
 
     return ok(context, {
       success: true,

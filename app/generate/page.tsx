@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 type Phrase = {
@@ -20,6 +20,100 @@ type ProviderInfo = {
   label: string;
 };
 
+type WorkflowStage = 'intake' | 'planning' | 'outline' | 'draft' | 'review' | 'done';
+
+type WorkflowQuestion = {
+  id: string;
+  label: string;
+  question: string;
+  placeholder: string;
+};
+
+type OutlineSection = {
+  id: string;
+  heading: string;
+  purpose: string;
+  keyPoints: string[];
+  notes?: string;
+};
+
+type PlanningSection = {
+  id: string;
+  headingDraft: string;
+  purpose: string;
+  topicSummary: string;
+  orderReason: string;
+};
+
+type PlanningOption = {
+  planId: string;
+  label: string;
+  strategy: string;
+  whyThisWorks: string;
+  sections: PlanningSection[];
+};
+
+type DraftSection = {
+  id: string;
+  heading: string;
+  body: string;
+};
+
+type ReviewCheck = {
+  code: string;
+  status: 'pass' | 'warning' | 'fail';
+  message: string;
+  fixPrompt: string;
+};
+
+type VersionItem = {
+  id: string;
+  stage: string;
+  title: string | null;
+  content: string | null;
+  sections: DraftSection[];
+  change_summary: string | null;
+  created_at: string;
+};
+
+type WritingRule = {
+  id: string;
+  doc_type: 'notice' | 'letter' | 'request' | 'report' | null;
+  name: string;
+  rule_type: 'required_phrase' | 'forbidden_phrase' | 'tone_rule' | 'structure_rule' | 'ending_rule' | 'organization_fact';
+  content: string;
+  priority: number;
+  enabled: boolean;
+};
+
+type ReferenceAnalysis = {
+  tone: string;
+  structure: string;
+  vocabulary: string;
+  sentenceStyle: string;
+  logicFlow: string;
+};
+
+type ReferenceAsset = {
+  id: string;
+  name: string;
+  doc_type: 'notice' | 'letter' | 'request' | 'report' | null;
+  file_name: string;
+  file_type: string;
+  content: string;
+  analysis: ReferenceAnalysis | null;
+  is_favorite: boolean;
+};
+
+type SessionReference = {
+  name: string;
+  docType: 'notice' | 'letter' | 'request' | 'report' | null;
+  fileName: string;
+  fileType: string;
+  content: string;
+  analysis: ReferenceAnalysis | null;
+};
+
 type Draft = {
   id: string;
   doc_type: 'notice' | 'letter' | 'request' | 'report';
@@ -32,15 +126,36 @@ type Draft = {
   contactName: string | null;
   contactPhone: string | null;
   attachments: string[];
+  workflowStage: WorkflowStage;
+  collectedFacts: Record<string, string | string[]>;
+  missingFields: string[];
+  planning: {
+    options: PlanningOption[];
+    selectedPlanId?: string;
+    sections: PlanningSection[];
+    planVersion?: string;
+    confirmed?: boolean;
+  } | null;
+  outline: {
+    titleOptions: string[];
+    sections: OutlineSection[];
+    risks: string[];
+    outlineVersion?: string;
+    confirmed?: boolean;
+  } | null;
+  sections: DraftSection[];
+  activeRuleIds: string[];
+  activeReferenceIds: string[];
+  versionCount: number;
+  generatedTitle: string;
+  generatedContent: string;
 };
 
-type ReferenceAnalysis = {
-  tone: string;
-  structure: string;
-  vocabulary: string;
-  sentenceStyle: string;
-  logicFlow: string;
-};
+const MAX_PLANNING_SECTIONS = 8;
+const editablePlanningFieldLabels = {
+  headingDraft: '段落标题',
+  topicSummary: '本段内容',
+} as const;
 
 const docTypes = [
   { id: 'notice', name: '通知', desc: '用于发布重要事项、安排工作等' },
@@ -49,18 +164,102 @@ const docTypes = [
   { id: 'report', name: '报告', desc: '用于向上级机关汇报工作、反映情况' },
 ] as const;
 
+function compileSections(sections: DraftSection[]) {
+  return sections
+    .map((section) => `${section.heading}\n${section.body}`.trim())
+    .filter(Boolean)
+    .join('\n\n');
+}
+
+function mapStageToStep(stage?: WorkflowStage) {
+  if (!stage || stage === 'intake') return 'intake';
+  if (stage === 'planning') return 'planning';
+  if (stage === 'outline') return 'outline';
+  if (stage === 'draft') return 'draft';
+  if (stage === 'review' || stage === 'done') return 'review';
+  return 'intake';
+}
+
+function formatFactValue(value: string | string[]) {
+  return Array.isArray(value) ? value.join('；') : value;
+}
+
+function statusClass(status: ReviewCheck['status']) {
+  if (status === 'pass') return 'bg-green-50 text-green-700 border-green-200';
+  if (status === 'warning') return 'bg-yellow-50 text-yellow-700 border-yellow-200';
+  return 'bg-red-50 text-red-700 border-red-200';
+}
+
+function getIncompletePlanningSections(sections: PlanningSection[]) {
+  return sections
+    .map((section, index) => {
+      const missing = Object.entries(editablePlanningFieldLabels)
+        .filter(([field]) => !section[field as keyof PlanningSection].trim())
+        .map(([, label]) => label);
+
+      if (missing.length === 0) {
+        return '';
+      }
+
+      return `第 ${index + 1} 段缺少：${missing.join('、')}`;
+    })
+    .filter(Boolean);
+}
+
+function StageTabs(props: {
+  currentStep: WorkflowStage;
+  onChange: (step: WorkflowStage) => void;
+  canVisitPlanning: boolean;
+  canVisitOutline: boolean;
+  canVisitDraft: boolean;
+  canVisitReview: boolean;
+}) {
+  const steps = [
+    { id: 'intake', label: '1. 信息采集', enabled: true },
+    { id: 'planning', label: '2. 结构共创', enabled: props.canVisitPlanning },
+    { id: 'outline', label: '3. 提纲确认', enabled: props.canVisitOutline },
+    { id: 'draft', label: '4. 分段成文', enabled: props.canVisitDraft },
+    { id: 'review', label: '5. 定稿检查', enabled: props.canVisitReview },
+  ] as const;
+
+  return (
+    <div className="grid grid-cols-2 xl:grid-cols-5 gap-3">
+      {steps.map((step) => (
+        <button
+          key={step.id}
+          type="button"
+          disabled={!step.enabled}
+          onClick={() => step.enabled && props.onChange(step.id)}
+          className={`rounded-xl border px-4 py-3 text-sm font-medium transition-colors ${
+            props.currentStep === step.id
+              ? 'border-blue-600 bg-blue-600 text-white'
+              : step.enabled
+                ? 'border-gray-200 bg-white hover:border-blue-300 hover:text-blue-700'
+                : 'border-gray-100 bg-gray-50 text-gray-400'
+          }`}
+        >
+          {step.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function GeneratePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const editableRef = useRef<HTMLDivElement>(null);
 
   const [bootstrapping, setBootstrapping] = useState(true);
   const [pageError, setPageError] = useState('');
   const [phrases, setPhrases] = useState<Phrase[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
-  const [docType, setDocType] = useState('');
+  const [rules, setRules] = useState<WritingRule[]>([]);
+  const [referenceAssets, setReferenceAssets] = useState<ReferenceAsset[]>([]);
   const [currentDraftId, setCurrentDraftId] = useState<string | null>(null);
+  const [docType, setDocType] = useState('');
+  const [workflowStage, setWorkflowStage] = useState<WorkflowStage>('intake');
+  const [currentStep, setCurrentStep] = useState<WorkflowStage>('intake');
   const [formData, setFormData] = useState({
     title: '',
     recipient: '',
@@ -71,27 +270,112 @@ function GeneratePageContent() {
     contactPhone: '',
   });
   const [provider, setProvider] = useState<ProviderInfo['id']>('claude');
-  const [generatedContent, setGeneratedContent] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [chatMessages, setChatMessages] = useState<{ role: 'user' | 'assistant'; content: string }[]>([]);
-  const [userInput, setUserInput] = useState('');
-  const [selectedText, setSelectedText] = useState('');
-  const [isEditing, setIsEditing] = useState(false);
   const [attachments, setAttachments] = useState<string[]>([]);
   const [newAttachment, setNewAttachment] = useState('');
-  const [referenceFile, setReferenceFile] = useState<File | null>(null);
-  const [referenceAnalysis, setReferenceAnalysis] = useState<ReferenceAnalysis | null>(null);
-  const [imitationStrength, setImitationStrength] = useState<'strict' | 'moderate' | 'loose'>('moderate');
-  const [analyzingReference, setAnalyzingReference] = useState(false);
-  const [contentHistory, setContentHistory] = useState<string[]>([]);
-  const [historyIndex, setHistoryIndex] = useState(-1);
-  const [latestVersion, setLatestVersion] = useState('');
   const [savingPhraseType, setSavingPhraseType] = useState<Phrase['type'] | null>(null);
+  const [activeRuleIds, setActiveRuleIds] = useState<string[]>([]);
+  const [activeReferenceIds, setActiveReferenceIds] = useState<string[]>([]);
+  const [sessionReferences, setSessionReferences] = useState<SessionReference[]>([]);
+  const [referenceUploadMode, setReferenceUploadMode] = useState<'session' | 'library'>('session');
+  const [referenceAnalysisPreview, setReferenceAnalysisPreview] = useState<ReferenceAnalysis | null>(null);
+  const [uploadingReference, setUploadingReference] = useState(false);
+  const [collectedFacts, setCollectedFacts] = useState<Record<string, string | string[]>>({});
+  const [missingFields, setMissingFields] = useState<string[]>([]);
+  const [nextQuestions, setNextQuestions] = useState<WorkflowQuestion[]>([]);
+  const [readiness, setReadiness] = useState<'needs_more' | 'ready'>('needs_more');
+  const [intakeMessage, setIntakeMessage] = useState('');
+  const [planningVersion, setPlanningVersion] = useState('');
+  const [planningOptions, setPlanningOptions] = useState<PlanningOption[]>([]);
+  const [selectedPlanId, setSelectedPlanId] = useState('');
+  const [planningSections, setPlanningSections] = useState<PlanningSection[]>([]);
+  const [planningConfirmed, setPlanningConfirmed] = useState(false);
+  const [outlineVersion, setOutlineVersion] = useState('');
+  const [titleOptions, setTitleOptions] = useState<string[]>([]);
+  const [outlineSections, setOutlineSections] = useState<OutlineSection[]>([]);
+  const [outlineRisks, setOutlineRisks] = useState<string[]>([]);
+  const [sections, setSections] = useState<DraftSection[]>([]);
+  const [selectedText, setSelectedText] = useState('');
+  const [selectionInstruction, setSelectionInstruction] = useState('');
+  const [fullInstruction, setFullInstruction] = useState('');
+  const [sectionInstructions, setSectionInstructions] = useState<Record<string, string>>({});
+  const [reviewChecks, setReviewChecks] = useState<ReviewCheck[]>([]);
+  const [versions, setVersions] = useState<VersionItem[]>([]);
+  const [busyAction, setBusyAction] = useState('');
+  const [ruleForm, setRuleForm] = useState({
+    name: '',
+    ruleType: 'tone_rule' as WritingRule['rule_type'],
+    content: '',
+    docType: '',
+  });
+
+  const previewContent = compileSections(sections);
+  const canVisitPlanning = readiness === 'ready' || planningOptions.length > 0 || ['planning', 'outline', 'draft', 'review', 'done'].includes(workflowStage);
+  const canVisitOutline = outlineSections.length > 0 || ['outline', 'draft', 'review', 'done'].includes(workflowStage);
+  const canVisitDraft = outlineSections.length > 0 && currentDraftId !== null;
+  const canVisitReview = sections.length > 0;
+  const busy = Boolean(busyAction);
+
+  const hydrateDraft = (draft: Draft) => {
+    setCurrentDraftId(draft.id);
+    setDocType(draft.doc_type);
+    setProvider(draft.provider);
+    setWorkflowStage(draft.workflowStage || 'intake');
+    setCurrentStep(mapStageToStep(draft.workflowStage || 'intake'));
+    setFormData({
+      title: draft.generatedTitle || draft.title || '',
+      recipient: draft.recipient || '',
+      content: draft.content || '',
+      issuer: draft.issuer || '',
+      date: draft.date || new Date().toISOString().split('T')[0],
+      contactName: draft.contactName || '',
+      contactPhone: draft.contactPhone || '',
+    });
+    setAttachments(draft.attachments || []);
+    setCollectedFacts(draft.collectedFacts || {});
+    setMissingFields(draft.missingFields || []);
+    setReadiness((draft.missingFields || []).length === 0 ? 'ready' : 'needs_more');
+    setActiveRuleIds(draft.activeRuleIds || []);
+    setActiveReferenceIds(draft.activeReferenceIds || []);
+    const planningOptionsFromDraft = draft.planning?.options || [];
+    setPlanningVersion(draft.planning?.planVersion || '');
+    setPlanningOptions(planningOptionsFromDraft);
+    setSelectedPlanId(draft.planning?.selectedPlanId || planningOptionsFromDraft[0]?.planId || '');
+    setPlanningSections(draft.planning?.sections || planningOptionsFromDraft[0]?.sections || []);
+    setPlanningConfirmed(Boolean(draft.planning?.confirmed));
+    setOutlineVersion(draft.outline?.outlineVersion || '');
+    setTitleOptions(draft.outline?.titleOptions || []);
+    setOutlineSections(draft.outline?.sections || []);
+    setOutlineRisks(draft.outline?.risks || []);
+    setSections(draft.sections || []);
+  };
+
+  const fetchVersions = async (draftId: string) => {
+    const response = await fetch(`/api/ai/versions?draftId=${draftId}`);
+    const data = await response.json();
+    if (response.ok) {
+      setVersions(data.versions || []);
+    }
+  };
+
+  const fetchRules = async () => {
+    const response = await fetch('/api/writing-rules');
+    const data = await response.json();
+    if (response.ok) {
+      setRules(data.rules || []);
+    }
+  };
+
+  const fetchReferenceAssets = async () => {
+    const response = await fetch('/api/reference-assets');
+    const data = await response.json();
+    if (response.ok) {
+      setReferenceAssets(data.assets || []);
+    }
+  };
 
   const fetchPhrases = async () => {
     const response = await fetch('/api/common-phrases');
     const data = await response.json();
-
     if (response.ok) {
       setPhrases(data.phrases || []);
     }
@@ -105,18 +389,22 @@ function GeneratePageContent() {
       setPageError('');
 
       try {
-        const [settingsRes, phrasesRes, contactsRes, draftsRes] = await Promise.all([
+        const [settingsRes, phrasesRes, contactsRes, draftsRes, rulesRes, assetsRes] = await Promise.all([
           fetch('/api/settings'),
           fetch('/api/common-phrases'),
           fetch('/api/contacts'),
           fetch('/api/drafts'),
+          fetch('/api/writing-rules'),
+          fetch('/api/reference-assets'),
         ]);
 
-        const [settingsData, phrasesData, contactsData, draftsData] = await Promise.all([
+        const [settingsData, phrasesData, contactsData, draftsData, rulesData, assetsData] = await Promise.all([
           settingsRes.json(),
           phrasesRes.json(),
           contactsRes.json(),
           draftsRes.json(),
+          rulesRes.json(),
+          assetsRes.json(),
         ]);
 
         if (!mounted) {
@@ -132,6 +420,8 @@ function GeneratePageContent() {
         setProviders(supportedProviders);
         setPhrases(phrasesData.phrases || []);
         setContacts(contactsData.contacts || []);
+        setRules(rulesData.rules || []);
+        setReferenceAssets(assetsData.assets || []);
 
         const savedProvider = localStorage.getItem('lastUsedProvider');
         const resolvedProvider =
@@ -145,19 +435,8 @@ function GeneratePageContent() {
         if (draftId) {
           const draft = (draftsData.drafts || []).find((item: Draft) => item.id === draftId);
           if (draft) {
-            setCurrentDraftId(draft.id);
-            setDocType(draft.doc_type);
-            setFormData({
-              title: draft.title || '',
-              recipient: draft.recipient || '',
-              content: draft.content || '',
-              issuer: draft.issuer || '',
-              date: draft.date || new Date().toISOString().split('T')[0],
-              contactName: draft.contactName || '',
-              contactPhone: draft.contactPhone || '',
-            });
-            setProvider(draft.provider || resolvedProvider);
-            setAttachments(draft.attachments || []);
+            hydrateDraft(draft);
+            fetchVersions(draft.id);
           }
         }
       } catch {
@@ -184,9 +463,71 @@ function GeneratePageContent() {
     router.refresh();
   };
 
+  const resetWorkflow = () => {
+    setCurrentDraftId(null);
+    setWorkflowStage('intake');
+    setCurrentStep('intake');
+    setCollectedFacts({});
+    setMissingFields([]);
+    setNextQuestions([]);
+    setReadiness('needs_more');
+    setPlanningVersion('');
+    setPlanningOptions([]);
+    setSelectedPlanId('');
+    setPlanningSections([]);
+    setPlanningConfirmed(false);
+    setOutlineVersion('');
+    setTitleOptions([]);
+    setOutlineSections([]);
+    setOutlineRisks([]);
+    setSections([]);
+    setSelectedText('');
+    setSelectionInstruction('');
+    setFullInstruction('');
+    setSectionInstructions({});
+    setReviewChecks([]);
+    setVersions([]);
+    setSessionReferences([]);
+    setActiveReferenceIds([]);
+  };
+
+  const handleDocTypeChange = (value: string) => {
+    setDocType(value);
+    resetWorkflow();
+  };
+
+  const updateOutlineKeyPoints = (sectionIndex: number, updater: (current: string[]) => string[]) => {
+    setOutlineSections((prev) =>
+      prev.map((item, current) =>
+        current === sectionIndex
+          ? {
+              ...item,
+              keyPoints: updater(item.keyPoints || []),
+            }
+          : item
+      )
+    );
+  };
+
+  const selectPlanningOption = (option: PlanningOption) => {
+    setSelectedPlanId(option.planId);
+    setPlanningSections(option.sections);
+    setPlanningConfirmed(false);
+  };
+
+  const updatePlanningSections = (updater: (current: PlanningSection[]) => PlanningSection[]) => {
+    setPlanningSections((prev) => updater(prev));
+    setPlanningConfirmed(false);
+  };
+
   const handleSaveDraft = async () => {
     if (!docType) {
       alert('请先选择文档类型');
+      return;
+    }
+
+    if (planningSections.length > MAX_PLANNING_SECTIONS) {
+      alert(`结构共创最多支持 ${MAX_PLANNING_SECTIONS} 段，请先删减后再保存`);
       return;
     }
 
@@ -199,14 +540,41 @@ function GeneratePageContent() {
         ...formData,
         provider,
         attachments,
+        workflowStage,
+        collectedFacts,
+        missingFields,
+        planning: planningSections.length || planningOptions.length
+          ? {
+              options: planningOptions,
+              selectedPlanId,
+              sections: planningSections,
+              planVersion: planningVersion,
+              confirmed: planningConfirmed,
+            }
+          : null,
+        outline: outlineSections.length
+          ? {
+              titleOptions,
+              sections: outlineSections,
+              risks: outlineRisks,
+              outlineVersion,
+              confirmed: workflowStage !== 'outline',
+            }
+          : null,
+        sections,
+        activeRuleIds,
+        activeReferenceIds,
+        versionCount: versions.length,
+        generatedTitle: formData.title,
+        generatedContent: previewContent,
       }),
     });
 
     const data = await response.json();
-
     if (response.ok) {
+      setCurrentDraftId(data.draftId);
       if (data.draftId) {
-        setCurrentDraftId(data.draftId);
+        fetchVersions(data.draftId);
       }
       alert('草稿已保存');
     } else {
@@ -215,9 +583,7 @@ function GeneratePageContent() {
   };
 
   const handleAddAttachment = () => {
-    if (!newAttachment.trim()) {
-      return;
-    }
+    if (!newAttachment.trim()) return;
     setAttachments((prev) => [...prev, newAttachment.trim()]);
     setNewAttachment('');
   };
@@ -251,7 +617,6 @@ function GeneratePageContent() {
 
   const handleSavePhrase = async (type: Phrase['type']) => {
     const value = (type === 'recipient' ? formData.recipient : formData.issuer).trim();
-
     if (!value) {
       alert(type === 'recipient' ? '请先填写主送机关' : '请先填写发文机关');
       return;
@@ -276,7 +641,6 @@ function GeneratePageContent() {
       });
 
       const data = await response.json();
-
       if (!response.ok) {
         throw new Error(data.error || '保存失败');
       }
@@ -301,17 +665,54 @@ function GeneratePageContent() {
     }
   };
 
+  const handleCreateRule = async () => {
+    if (!ruleForm.name.trim() || !ruleForm.content.trim()) {
+      alert('请填写规则名称和规则内容');
+      return;
+    }
+
+    const response = await fetch('/api/writing-rules', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: ruleForm.name,
+        docType: ruleForm.docType || null,
+        ruleType: ruleForm.ruleType,
+        content: ruleForm.content,
+        priority: 60,
+        enabled: true,
+      }),
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      alert(data.error || '规则保存失败');
+      return;
+    }
+
+    await fetchRules();
+    if (data.ruleId) {
+      setActiveRuleIds((prev) => Array.from(new Set([...prev, data.ruleId])));
+    }
+    setRuleForm({
+      name: '',
+      ruleType: 'tone_rule',
+      content: '',
+      docType: docType || '',
+    });
+  };
+
   const handleReferenceUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
     if (!docType) {
-      alert('请先选择文档类型');
+      alert('请先选择文种');
       return;
     }
 
-    setReferenceFile(file);
-    setAnalyzingReference(true);
+    setUploadingReference(true);
+    setReferenceAnalysisPreview(null);
 
     try {
       const formData = new FormData();
@@ -323,9 +724,8 @@ function GeneratePageContent() {
         body: formData,
       });
       const uploadData = await uploadRes.json();
-
       if (!uploadRes.ok) {
-        throw new Error(uploadData.error || '文件上传失败');
+        throw new Error(uploadData.error || '参考材料上传失败');
       }
 
       const analyzeRes = await fetch('/api/analyze-reference', {
@@ -338,176 +738,422 @@ function GeneratePageContent() {
         }),
       });
       const analyzeData = await analyzeRes.json();
-
       if (!analyzeRes.ok) {
         throw new Error(analyzeData.error || '风格分析失败');
       }
 
-      setReferenceAnalysis(analyzeData.analysis);
+      const sessionReference: SessionReference = {
+        name: file.name.replace(/\.[^.]+$/, ''),
+        docType: docType as Draft['doc_type'],
+        fileName: file.name,
+        fileType: file.name.split('.').pop()?.toLowerCase() || 'txt',
+        content: uploadData.content,
+        analysis: analyzeData.analysis,
+      };
+
+      setReferenceAnalysisPreview(analyzeData.analysis);
+      if (referenceUploadMode === 'library') {
+        const saveRes = await fetch('/api/reference-assets', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: sessionReference.name,
+            docType,
+            fileName: sessionReference.fileName,
+            fileType: sessionReference.fileType,
+            content: sessionReference.content,
+            analysis: sessionReference.analysis,
+            isFavorite: true,
+          }),
+        });
+        const saveData = await saveRes.json();
+        if (!saveRes.ok) {
+          throw new Error(saveData.error || '参考材料保存失败');
+        }
+        await fetchReferenceAssets();
+        if (saveData.assetId) {
+          setActiveReferenceIds((prev) => Array.from(new Set([...prev, saveData.assetId])));
+        }
+      } else {
+        setSessionReferences((prev) => [sessionReference, ...prev].slice(0, 3));
+      }
     } catch (error: any) {
-      setReferenceFile(null);
-      setReferenceAnalysis(null);
-      alert(error.message || '处理失败，请重试');
+      alert(error.message || '参考材料处理失败');
     } finally {
-      setAnalyzingReference(false);
+      setUploadingReference(false);
+      event.target.value = '';
     }
   };
 
-  const handleRemoveReference = () => {
-    setReferenceFile(null);
-    setReferenceAnalysis(null);
-  };
-
-  const handlePolish = async () => {
-    if (!formData.recipient || !formData.content) {
-      alert('请填写主送机关和主要内容');
+  const handleIntake = async () => {
+    if (!docType) {
+      alert('请先选择文种');
       return;
     }
 
-    if (!providers.length) {
-      alert('当前还没有启用任何平台 AI 提供商');
-      return;
-    }
-
-    setLoading(true);
+    setBusyAction('intake');
 
     try {
-      const response = await fetch('/api/polish', {
+      const response = await fetch('/api/ai/intake', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          draftId: currentDraftId,
           docType,
-          title: formData.title,
-          recipient: formData.recipient,
-          content: formData.content,
           provider,
-          attachments,
-          referenceAnalysis,
-          imitationStrength,
+          answers: {
+            title: formData.title,
+            recipient: formData.recipient,
+            content: formData.content,
+            issuer: formData.issuer,
+            date: formData.date,
+            contactName: formData.contactName,
+            contactPhone: formData.contactPhone,
+            attachments,
+          },
+          message: intakeMessage,
+          activeRuleIds,
+          activeReferenceIds,
+          sessionReferences,
         }),
       });
-
       const data = await response.json();
-
       if (!response.ok) {
-        throw new Error(data.error || '生成失败');
+        throw new Error(data.error || '信息采集失败');
       }
 
-      if (data.generated_content) {
-        setGeneratedContent(data.generated_content);
+      setCurrentDraftId(data.draftId);
+      setCollectedFacts(data.collectedFacts || {});
+      setMissingFields(data.missingFields || []);
+      setNextQuestions(data.nextQuestions || []);
+      setReadiness(data.readiness || 'needs_more');
+      setWorkflowStage(data.workflowStage || (data.readiness === 'ready' ? 'planning' : 'intake'));
+      if (!formData.title && data.suggestedTitle) {
+        setFormData((prev) => ({ ...prev, title: data.suggestedTitle }));
       }
-
-      if (data.generated_title) {
-        setFormData((prev) => ({
-          ...prev,
-          title: data.generated_title,
-        }));
+      if (data.readiness === 'ready') {
+        setCurrentStep('planning');
       }
+      setIntakeMessage('');
+      fetchVersions(data.draftId);
     } catch (error: any) {
-      alert(error.message || '生成失败');
+      alert(error.message || '信息采集失败');
     } finally {
-      setLoading(false);
+      setBusyAction('');
     }
   };
 
-  const handleTextSelect = () => {
-    const text = window.getSelection()?.toString().trim();
-    if (text) {
-      setSelectedText(text);
+  const handleGeneratePlanning = async () => {
+    if (!currentDraftId) {
+      alert('请先完成一次 AI 信息采集');
+      return;
     }
-  };
 
-  const handleSendMessage = async () => {
-    if (!userInput.trim()) return;
-
-    const feedback = selectedText ? `针对这部分内容："${selectedText}"，${userInput}` : userInput;
-    setChatMessages((prev) => [...prev, { role: 'user', content: userInput }]);
-    setUserInput('');
-    setLoading(true);
+    setBusyAction('planning');
 
     try {
-      const response = await fetch('/api/refine', {
+      const response = await fetch('/api/ai/outline-plan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          docType,
-          recipient: formData.recipient,
-          originalContent: generatedContent,
-          userFeedback: feedback,
+          draftId: currentDraftId,
           provider,
+          sessionReferences,
         }),
       });
       const data = await response.json();
-
-      if (!response.ok || !data.refined_content) {
-        throw new Error(data.error || '修改失败');
+      if (!response.ok) {
+        throw new Error(data.error || '结构建议生成失败');
       }
 
-      setContentHistory((prev) => {
-        const nextHistory = historyIndex === -1 ? [generatedContent, ...prev] : [generatedContent, ...prev.slice(historyIndex)];
-        return nextHistory.slice(0, 10);
-      });
-      setHistoryIndex(-1);
-      setGeneratedContent(data.refined_content);
-      setChatMessages((prev) => [...prev, { role: 'assistant', content: '已根据您的意见修改完成' }]);
+      setPlanningVersion(data.planVersion || '');
+      setPlanningOptions(data.options || []);
+      if (data.options?.[0]) {
+        selectPlanningOption(data.options[0]);
+      }
+      setWorkflowStage('planning');
+      setCurrentStep('planning');
     } catch (error: any) {
-      setChatMessages((prev) => [...prev, { role: 'assistant', content: error.message || '修改失败，请重试' }]);
+      alert(error.message || '结构建议生成失败');
     } finally {
-      setLoading(false);
-      setSelectedText('');
+      setBusyAction('');
     }
   };
 
-  const handleUndo = () => {
-    if (contentHistory.length === 0) return;
-    if (historyIndex === -1) {
-      setLatestVersion(generatedContent);
+  const handleGenerateOutline = async (mode: 'direct' | 'fromPlan' = 'direct') => {
+    if (!currentDraftId) {
+      alert('请先完成一次 AI 信息采集');
+      return;
     }
-    const nextIndex = historyIndex + 1;
-    if (nextIndex >= contentHistory.length) return;
-    setGeneratedContent(contentHistory[nextIndex]);
-    setHistoryIndex(nextIndex);
-    setChatMessages((prev) => [...prev, { role: 'assistant', content: '已撤销到上一个版本' }]);
+
+    if (mode === 'fromPlan' && planningSections.length === 0) {
+      alert('请先确认结构方案');
+      return;
+    }
+
+    if (mode === 'fromPlan') {
+      if (planningSections.length > MAX_PLANNING_SECTIONS) {
+        alert(`结构共创最多支持 ${MAX_PLANNING_SECTIONS} 段，请先删减后再生成正式提纲`);
+        return;
+      }
+
+      const incompleteSections = getIncompletePlanningSections(planningSections);
+      if (incompleteSections.length > 0) {
+        alert(`请先补全结构共创中的段落信息：\n${incompleteSections.join('\n')}`);
+        return;
+      }
+    }
+
+    setBusyAction('outline');
+
+    try {
+      const response = await fetch('/api/ai/outline', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          draftId: currentDraftId,
+          provider,
+          confirmedPlan:
+            mode === 'fromPlan'
+              ? {
+                  selectedPlanId,
+                  sections: planningSections,
+                }
+              : null,
+          sessionReferences,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || '提纲生成失败');
+      }
+
+      setOutlineVersion(data.outlineVersion || '');
+      setTitleOptions(data.titleOptions || []);
+      setOutlineSections(data.outlineSections || []);
+      setOutlineRisks(data.risks || []);
+      if (!formData.title && data.titleOptions?.[0]) {
+        setFormData((prev) => ({ ...prev, title: data.titleOptions[0] }));
+      }
+      setWorkflowStage('outline');
+      setCurrentStep('outline');
+      if (mode === 'fromPlan') {
+        setPlanningConfirmed(true);
+      }
+    } catch (error: any) {
+      alert(error.message || '提纲生成失败');
+    } finally {
+      setBusyAction('');
+    }
   };
 
-  const handleRedo = () => {
-    if (historyIndex < 0) return;
-    const nextIndex = historyIndex - 1;
-    setGeneratedContent(nextIndex === -1 ? latestVersion : contentHistory[nextIndex]);
-    setHistoryIndex(nextIndex);
-    setChatMessages((prev) => [...prev, { role: 'assistant', content: '已恢复到下一个版本' }]);
+  const handleConfirmOutline = async () => {
+    if (!currentDraftId || outlineSections.length === 0) {
+      alert('请先生成提纲');
+      return;
+    }
+
+    const response = await fetch('/api/ai/outline/confirm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        draftId: currentDraftId,
+        outlineVersion,
+        acceptedOutline: {
+          title: formData.title,
+          titleOptions,
+          sections: outlineSections,
+          risks: outlineRisks,
+        },
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      alert(data.error || '提纲确认失败');
+      return;
+    }
+
+    setWorkflowStage('draft');
+    setCurrentStep('draft');
+    fetchVersions(currentDraftId);
+  };
+
+  const handleGenerateDraft = async (mode: 'full' | 'section' = 'full', sectionId = '') => {
+    if (!currentDraftId) {
+      alert('请先完成提纲确认');
+      return;
+    }
+
+    setBusyAction(mode === 'section' ? `section-${sectionId}` : 'draft');
+
+    try {
+      const response = await fetch('/api/ai/draft', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          draftId: currentDraftId,
+          provider,
+          mode,
+          sectionId,
+          sessionReferences,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || '正文生成失败');
+      }
+
+      setSections(data.sections || []);
+      if (data.title) {
+        setFormData((prev) => ({ ...prev, title: data.title }));
+      }
+      setWorkflowStage('review');
+      setCurrentStep('draft');
+      fetchVersions(currentDraftId);
+    } catch (error: any) {
+      alert(error.message || '正文生成失败');
+    } finally {
+      setBusyAction('');
+    }
+  };
+
+  const handleRevise = async (targetType: 'selection' | 'section' | 'full', targetId = '', instruction = '') => {
+    if (!currentDraftId || !instruction.trim()) {
+      alert('请先填写修改指令');
+      return;
+    }
+
+    setBusyAction(`revise-${targetType}`);
+
+    try {
+      const response = await fetch('/api/ai/revise', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          draftId: currentDraftId,
+          provider,
+          targetType,
+          targetId,
+          selectedText,
+          instruction,
+          sessionReferences,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || '改写失败');
+      }
+
+      setSections(data.updatedSections || []);
+      if (data.title) {
+        setFormData((prev) => ({ ...prev, title: data.title }));
+      }
+      if (targetType === 'selection') {
+        setSelectionInstruction('');
+        setSelectedText('');
+      } else if (targetType === 'full') {
+        setFullInstruction('');
+      } else if (targetId) {
+        setSectionInstructions((prev) => ({ ...prev, [targetId]: '' }));
+      }
+      fetchVersions(currentDraftId);
+      alert(data.changeSummary || '修改完成');
+    } catch (error: any) {
+      alert(error.message || '改写失败');
+    } finally {
+      setBusyAction('');
+    }
+  };
+
+  const handleRunReview = async () => {
+    if (!currentDraftId || sections.length === 0) {
+      alert('请先生成正文');
+      return;
+    }
+
+    setBusyAction('review');
+
+    try {
+      const response = await fetch('/api/ai/review', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          draftId: currentDraftId,
+          provider,
+          sessionReferences,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || '定稿检查失败');
+      }
+
+      setReviewChecks(data.checks || []);
+      setWorkflowStage('review');
+      setCurrentStep('review');
+      fetchVersions(currentDraftId);
+    } catch (error: any) {
+      alert(error.message || '定稿检查失败');
+    } finally {
+      setBusyAction('');
+    }
+  };
+
+  const handleRestoreVersion = async (versionId: string) => {
+    if (!currentDraftId) return;
+
+    const response = await fetch('/api/ai/versions/restore', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        draftId: currentDraftId,
+        versionId,
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      alert(data.error || '版本恢复失败');
+      return;
+    }
+
+    if (data.version?.title) {
+      setFormData((prev) => ({ ...prev, title: data.version.title }));
+    }
+    setSections(data.version?.sections || []);
+    setWorkflowStage('draft');
+    setCurrentStep('draft');
+    fetchVersions(currentDraftId);
   };
 
   const handleDownload = async () => {
-    if (!generatedContent) {
-      alert('请先生成公文内容');
+    if (!docType || !previewContent) {
+      alert('请先完成正文生成');
       return;
     }
 
-    let contentToUse = generatedContent;
-    if (isEditing && editableRef.current) {
-      const paragraphs = Array.from(editableRef.current.querySelectorAll('p'));
-      contentToUse = paragraphs.map((paragraph) => paragraph.textContent || '').join('\n');
-      setGeneratedContent(contentToUse);
+    if (!formData.title || !formData.recipient || !formData.issuer || !formData.date) {
+      alert('导出前请补齐标题、主送机关、发文机关和日期');
+      return;
     }
 
-    setLoading(true);
+    setBusyAction('download');
 
     try {
       const response = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          draftId: currentDraftId,
           docType,
           ...formData,
-          generatedContent: contentToUse,
+          generatedContent: previewContent,
           provider,
           attachments,
+          sections,
         }),
       });
 
       const data = await response.json();
-
       if (!response.ok || !data.file_data) {
         throw new Error(data.error || '导出失败');
       }
@@ -530,144 +1176,152 @@ function GeneratePageContent() {
       anchor.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(anchor);
+      if (currentDraftId) {
+        fetchVersions(currentDraftId);
+      }
     } catch (error: any) {
       alert(error.message || '导出失败');
     } finally {
-      setLoading(false);
+      setBusyAction('');
     }
   };
+
+  const visibleRules = rules.filter((rule) => !docType || !rule.doc_type || rule.doc_type === docType);
+  const visibleAssets = referenceAssets.filter((asset) => !docType || !asset.doc_type || asset.doc_type === docType);
 
   if (bootstrapping) {
     return <div className="min-h-screen flex items-center justify-center">加载中...</div>;
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-8">
-      <div className="max-w-6xl mx-auto">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold">生成公文</h1>
-          <div className="flex gap-4">
-            <button onClick={handleSaveDraft} className="text-blue-600 hover:underline">
+    <div className="min-h-screen bg-gray-50 p-6 xl:p-8">
+      <div className="mx-auto max-w-7xl space-y-6">
+        <div className="flex flex-col gap-4 rounded-2xl bg-white p-6 shadow-sm xl:flex-row xl:items-center xl:justify-between">
+          <div>
+            <h1 className="text-2xl font-bold">AI 协作式公文工作台</h1>
+            <p className="mt-1 text-sm text-gray-500">先补齐事实，再确认提纲，再逐段成文，最后做定稿检查。</p>
+          </div>
+          <div className="flex flex-wrap gap-3 text-sm">
+            <button onClick={handleSaveDraft} className="rounded-lg border border-blue-200 px-4 py-2 text-blue-700 hover:bg-blue-50">
               保存草稿
             </button>
-            <button onClick={() => router.push('/settings')} className="text-blue-600 hover:underline">
+            <button onClick={() => router.push('/settings')} className="rounded-lg border border-gray-200 px-4 py-2 hover:bg-gray-50">
               设置
             </button>
-            <button onClick={() => router.push('/')} className="text-blue-600 hover:underline">
+            <button onClick={() => router.push('/')} className="rounded-lg border border-gray-200 px-4 py-2 hover:bg-gray-50">
               返回首页
             </button>
-            <button onClick={handleLogout} className="text-gray-600 hover:text-gray-900">
+            <button onClick={handleLogout} className="rounded-lg border border-gray-200 px-4 py-2 hover:bg-gray-50">
               退出登录
             </button>
           </div>
         </div>
 
-        {pageError && <div className="mb-4 p-3 rounded-md bg-red-50 text-red-700">{pageError}</div>}
+        {pageError && <div className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{pageError}</div>}
 
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          <div className="flex flex-col gap-4">
-            <div className="bg-white rounded-lg shadow flex-1">
-              <div className="p-6 max-h-[calc(100vh-20rem)] overflow-y-auto">
-                <h2 className="text-lg font-bold mb-4">文档信息</h2>
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium mb-2">文档类型</label>
-                    <select value={docType} onChange={(event) => setDocType(event.target.value)} className="w-full px-3 py-2 border rounded-md">
-                      <option value="">请选择文档类型</option>
-                      {docTypes.map((type) => (
-                        <option key={type.id} value={type.id}>
-                          {type.name}
-                        </option>
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[420px,1fr]">
+          <div className="space-y-6">
+            <div className="rounded-2xl bg-white p-6 shadow-sm">
+              <h2 className="text-lg font-bold">基础信息</h2>
+              <div className="mt-4 space-y-4">
+                <div>
+                  <label className="mb-2 block text-sm font-medium">文种</label>
+                  <select value={docType} onChange={(event) => handleDocTypeChange(event.target.value)} className="w-full rounded-lg border px-3 py-2">
+                    <option value="">请选择文种</option>
+                    {docTypes.map((type) => (
+                      <option key={type.id} value={type.id}>
+                        {type.name}：{type.desc}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium">标题</label>
+                  <input
+                    type="text"
+                    value={formData.title}
+                    onChange={(event) => setFormData((prev) => ({ ...prev, title: event.target.value }))}
+                    className="w-full rounded-lg border px-3 py-2"
+                    placeholder="AI 会结合提纲为你建议标题"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium">主送机关</label>
+                  <input
+                    type="text"
+                    value={formData.recipient}
+                    onChange={(event) => setFormData((prev) => ({ ...prev, recipient: event.target.value }))}
+                    list="recipient-list"
+                    className="w-full rounded-lg border px-3 py-2"
+                    placeholder="例如：各部门、各单位"
+                  />
+                  <button
+                    onClick={() => handleSavePhrase('recipient')}
+                    disabled={savingPhraseType === 'recipient'}
+                    className="mt-2 text-sm text-blue-600 hover:underline disabled:text-gray-400"
+                  >
+                    保存到常用信息
+                  </button>
+                  <datalist id="recipient-list">
+                    {phrases
+                      .filter((phrase) => phrase.type === 'recipient')
+                      .map((phrase) => (
+                        <option key={phrase.id} value={phrase.phrase} />
                       ))}
-                    </select>
-                  </div>
+                  </datalist>
+                </div>
 
-                  <div>
-                    <label className="block text-sm font-medium mb-2">标题（可选）</label>
-                    <input
-                      type="text"
-                      value={formData.title}
-                      onChange={(event) => setFormData((prev) => ({ ...prev, title: event.target.value }))}
-                      className="w-full px-3 py-2 border rounded-md"
-                      placeholder="留空则由 AI 自动生成标题"
-                    />
-                  </div>
+                <div>
+                  <label className="mb-2 block text-sm font-medium">需求描述</label>
+                  <textarea
+                    value={formData.content}
+                    onChange={(event) => setFormData((prev) => ({ ...prev, content: event.target.value }))}
+                    className="min-h-[180px] w-full rounded-lg border px-3 py-2"
+                    placeholder="先用自然语言写下你现在掌握的背景、目标、要点和要求，AI 会继续追问缺口。"
+                  />
+                </div>
 
-                  <div>
-                    <label className="block text-sm font-medium mb-2">主送机关</label>
-                    <input
-                      type="text"
-                      value={formData.recipient}
-                      onChange={(event) => setFormData((prev) => ({ ...prev, recipient: event.target.value }))}
-                      list="recipient-list"
-                      className="w-full px-3 py-2 border rounded-md"
-                      placeholder="例如：各部门、各单位"
-                    />
-                    <button
-                      onClick={() => handleSavePhrase('recipient')}
-                      disabled={savingPhraseType === 'recipient'}
-                      className="mt-2 text-sm text-blue-600 hover:underline disabled:text-gray-400 disabled:no-underline"
-                    >
-                      保存到常用信息
-                    </button>
-                    <datalist id="recipient-list">
-                      {phrases
-                        .filter((phrase) => phrase.type === 'recipient')
-                        .map((phrase) => (
-                          <option key={phrase.id} value={phrase.phrase} />
-                        ))}
-                    </datalist>
-                  </div>
+                <div>
+                  <label className="mb-2 block text-sm font-medium">发文机关</label>
+                  <input
+                    type="text"
+                    value={formData.issuer}
+                    onChange={(event) => setFormData((prev) => ({ ...prev, issuer: event.target.value }))}
+                    list="issuer-list"
+                    className="w-full rounded-lg border px-3 py-2"
+                    placeholder="例如：XX单位办公室"
+                  />
+                  <button
+                    onClick={() => handleSavePhrase('issuer')}
+                    disabled={savingPhraseType === 'issuer'}
+                    className="mt-2 text-sm text-blue-600 hover:underline disabled:text-gray-400"
+                  >
+                    保存到常用信息
+                  </button>
+                  <datalist id="issuer-list">
+                    {phrases
+                      .filter((phrase) => phrase.type === 'issuer')
+                      .map((phrase) => (
+                        <option key={phrase.id} value={phrase.phrase} />
+                      ))}
+                  </datalist>
+                </div>
 
-                  <div>
-                    <label className="block text-sm font-medium mb-2">主要内容</label>
-                    <textarea
-                      value={formData.content}
-                      onChange={(event) => setFormData((prev) => ({ ...prev, content: event.target.value }))}
-                      className="w-full px-3 py-2 border rounded-md"
-                      rows={10}
-                      placeholder="请用自然语言描述完整内容，AI 会自动转换为规范格式"
-                    />
-                  </div>
+                <div>
+                  <label className="mb-2 block text-sm font-medium">成文日期</label>
+                  <input
+                    type="date"
+                    value={formData.date}
+                    onChange={(event) => setFormData((prev) => ({ ...prev, date: event.target.value }))}
+                    className="w-full rounded-lg border px-3 py-2"
+                  />
+                </div>
 
+                <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-sm font-medium mb-2">发文机关</label>
-                    <input
-                      type="text"
-                      value={formData.issuer}
-                      onChange={(event) => setFormData((prev) => ({ ...prev, issuer: event.target.value }))}
-                      list="issuer-list"
-                      className="w-full px-3 py-2 border rounded-md"
-                      placeholder="例如：XX单位办公室"
-                    />
-                    <button
-                      onClick={() => handleSavePhrase('issuer')}
-                      disabled={savingPhraseType === 'issuer'}
-                      className="mt-2 text-sm text-blue-600 hover:underline disabled:text-gray-400 disabled:no-underline"
-                    >
-                      保存到常用信息
-                    </button>
-                    <datalist id="issuer-list">
-                      {phrases
-                        .filter((phrase) => phrase.type === 'issuer')
-                        .map((phrase) => (
-                          <option key={phrase.id} value={phrase.phrase} />
-                        ))}
-                    </datalist>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium mb-2">成文日期</label>
-                    <input
-                      type="date"
-                      value={formData.date}
-                      onChange={(event) => setFormData((prev) => ({ ...prev, date: event.target.value }))}
-                      className="w-full px-3 py-2 border rounded-md"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium mb-2">联系人</label>
+                    <label className="mb-2 block text-sm font-medium">联系人</label>
                     <input
                       type="text"
                       value={formData.contactName}
@@ -677,8 +1331,7 @@ function GeneratePageContent() {
                         handleSelectContact(name);
                       }}
                       list="contact-list"
-                      className="w-full px-3 py-2 border rounded-md"
-                      placeholder="例如：张三"
+                      className="w-full rounded-lg border px-3 py-2"
                     />
                     <datalist id="contact-list">
                       {contacts.map((contact) => (
@@ -686,201 +1339,863 @@ function GeneratePageContent() {
                       ))}
                     </datalist>
                   </div>
-
                   <div>
-                    <label className="block text-sm font-medium mb-2">联系电话</label>
+                    <label className="mb-2 block text-sm font-medium">联系电话</label>
                     <input
                       type="text"
                       value={formData.contactPhone}
                       onChange={(event) => setFormData((prev) => ({ ...prev, contactPhone: event.target.value }))}
-                      className="w-full px-3 py-2 border rounded-md"
-                      placeholder="例如：010-12345678"
+                      className="w-full rounded-lg border px-3 py-2"
                     />
-                    <button onClick={handleSaveContact} className="mt-2 text-sm text-blue-600 hover:underline">
-                      保存为常用联系人
+                  </div>
+                </div>
+                <button onClick={handleSaveContact} className="text-sm text-blue-600 hover:underline">
+                  保存为常用联系人
+                </button>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium">附件</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={newAttachment}
+                      onChange={(event) => setNewAttachment(event.target.value)}
+                      onKeyDown={(event) => event.key === 'Enter' && handleAddAttachment()}
+                      className="flex-1 rounded-lg border px-3 py-2"
+                      placeholder="输入附件名称"
+                    />
+                    <button onClick={handleAddAttachment} className="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700">
+                      添加
                     </button>
                   </div>
-
-                  <div>
-                    <label className="block text-sm font-medium mb-2">附件（可选）</label>
-                    <div className="text-xs text-gray-500 mb-2">添加附件名称，正文中会自动引用</div>
-                    <div className="flex gap-2 mb-2">
-                      <input
-                        type="text"
-                        value={newAttachment}
-                        onChange={(event) => setNewAttachment(event.target.value)}
-                        onKeyDown={(event) => event.key === 'Enter' && handleAddAttachment()}
-                        className="flex-1 px-3 py-2 border rounded-md"
-                        placeholder="输入附件名称"
-                      />
-                      <button onClick={handleAddAttachment} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
-                        添加
-                      </button>
+                  {attachments.length > 0 && (
+                    <div className="mt-3 space-y-2">
+                      {attachments.map((attachment, index) => (
+                        <div key={attachment + index} className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-sm">
+                          <span>
+                            {index + 1}. {attachment}
+                          </span>
+                          <button onClick={() => handleRemoveAttachment(index)} className="text-red-600 hover:underline">
+                            删除
+                          </button>
+                        </div>
+                      ))}
                     </div>
-                    {attachments.length > 0 && (
-                      <div className="space-y-1">
-                        {attachments.map((attachment, index) => (
-                          <div key={attachment + index} className="flex items-center justify-between bg-gray-50 px-3 py-2 rounded">
-                            <span className="text-sm">
-                              {index + 1}. {attachment}
-                            </span>
-                            <button onClick={() => handleRemoveAttachment(index)} className="text-red-600 hover:text-red-800 text-sm">
-                              删除
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-2xl bg-white p-6 shadow-sm">
+              <h2 className="text-lg font-bold">AI 约束与参考</h2>
+              <div className="mt-4 space-y-4">
+                <div>
+                  <label className="mb-2 block text-sm font-medium">AI 提供商</label>
+                  <select
+                    value={provider}
+                    onChange={(event) => {
+                      const nextProvider = event.target.value as ProviderInfo['id'];
+                      setProvider(nextProvider);
+                      localStorage.setItem('lastUsedProvider', nextProvider);
+                    }}
+                    className="w-full rounded-lg border px-3 py-2"
+                    disabled={!providers.length}
+                  >
+                    {providers.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="rounded-xl border border-gray-200 p-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-medium">个人规则库</h3>
+                    <span className="text-xs text-gray-500">可多选</span>
+                  </div>
+                  <div className="mt-3 max-h-44 space-y-2 overflow-y-auto">
+                    {visibleRules.map((rule) => (
+                      <label key={rule.id} className="flex items-start gap-2 rounded-lg bg-gray-50 px-3 py-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={activeRuleIds.includes(rule.id)}
+                          onChange={(event) =>
+                            setActiveRuleIds((prev) =>
+                              event.target.checked ? Array.from(new Set([...prev, rule.id])) : prev.filter((item) => item !== rule.id)
+                            )
+                          }
+                          className="mt-1"
+                        />
+                        <span>
+                          <strong>{rule.name}</strong>
+                          <span className="ml-2 text-xs text-gray-500">{rule.rule_type}</span>
+                          <span className="mt-1 block text-gray-600">{rule.content}</span>
+                        </span>
+                      </label>
+                    ))}
+                    {visibleRules.length === 0 && <div className="text-sm text-gray-400">还没有规则，下面可以立即新增。</div>}
+                  </div>
+                  <div className="mt-4 space-y-2 rounded-lg bg-blue-50 p-3">
+                    <input
+                      type="text"
+                      value={ruleForm.name}
+                      onChange={(event) => setRuleForm((prev) => ({ ...prev, name: event.target.value }))}
+                      className="w-full rounded-lg border px-3 py-2 text-sm"
+                      placeholder="规则名称，例如：请示结尾必须规范"
+                    />
+                    <div className="grid grid-cols-2 gap-2">
+                      <select
+                        value={ruleForm.ruleType}
+                        onChange={(event) => setRuleForm((prev) => ({ ...prev, ruleType: event.target.value as WritingRule['rule_type'] }))}
+                        className="rounded-lg border px-3 py-2 text-sm"
+                      >
+                        <option value="tone_rule">语气规则</option>
+                        <option value="structure_rule">结构规则</option>
+                        <option value="required_phrase">必备短语</option>
+                        <option value="forbidden_phrase">禁用短语</option>
+                        <option value="ending_rule">结尾规则</option>
+                        <option value="organization_fact">单位事实</option>
+                      </select>
+                      <select
+                        value={ruleForm.docType}
+                        onChange={(event) => setRuleForm((prev) => ({ ...prev, docType: event.target.value }))}
+                        className="rounded-lg border px-3 py-2 text-sm"
+                      >
+                        <option value="">适用于所有文种</option>
+                        {docTypes.map((type) => (
+                          <option key={type.id} value={type.id}>
+                            {type.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <textarea
+                      value={ruleForm.content}
+                      onChange={(event) => setRuleForm((prev) => ({ ...prev, content: event.target.value }))}
+                      className="min-h-[90px] w-full rounded-lg border px-3 py-2 text-sm"
+                      placeholder="例如：请示正文结尾必须使用“妥否，请批示”或同等规范表达。"
+                    />
+                    <button onClick={handleCreateRule} className="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700">
+                      添加规则
+                    </button>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-gray-200 p-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-medium">参考材料</h3>
+                    <select
+                      value={referenceUploadMode}
+                      onChange={(event) => setReferenceUploadMode(event.target.value as 'session' | 'library')}
+                      className="rounded-lg border px-3 py-2 text-sm"
+                    >
+                      <option value="session">仅当前写作使用</option>
+                      <option value="library">保存到个人参考库</option>
+                    </select>
+                  </div>
+                  <p className="mt-2 text-xs text-gray-500">上传后会先做风格分析，再用于提纲和正文生成。</p>
+                  <input
+                    type="file"
+                    accept=".docx,.pdf,.txt"
+                    onChange={handleReferenceUpload}
+                    className="mt-3 w-full rounded-lg border px-3 py-2 text-sm"
+                    disabled={uploadingReference}
+                  />
+                  {uploadingReference && <div className="mt-2 text-sm text-blue-600">参考材料处理中...</div>}
+                  {referenceAnalysisPreview && (
+                    <div className="mt-3 rounded-lg bg-blue-50 p-3 text-sm text-blue-900">
+                      <div>语气：{referenceAnalysisPreview.tone}</div>
+                      <div>结构：{referenceAnalysisPreview.structure}</div>
+                      <div>用词：{referenceAnalysisPreview.vocabulary}</div>
+                    </div>
+                  )}
+
+                  {sessionReferences.length > 0 && (
+                    <div className="mt-4">
+                      <div className="text-sm font-medium">当前会话参考</div>
+                      <div className="mt-2 space-y-2">
+                        {sessionReferences.map((item, index) => (
+                          <div key={item.fileName + index} className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-sm">
+                            <span>{item.name}</span>
+                            <button
+                              onClick={() => setSessionReferences((prev) => prev.filter((_, current) => current !== index))}
+                              className="text-red-600 hover:underline"
+                            >
+                              移除
                             </button>
                           </div>
                         ))}
                       </div>
-                    )}
+                    </div>
+                  )}
+
+                  <div className="mt-4 max-h-48 space-y-2 overflow-y-auto">
+                    {visibleAssets.map((asset) => (
+                      <label key={asset.id} className="flex items-start gap-2 rounded-lg bg-gray-50 px-3 py-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={activeReferenceIds.includes(asset.id)}
+                          onChange={(event) =>
+                            setActiveReferenceIds((prev) =>
+                              event.target.checked ? Array.from(new Set([...prev, asset.id])) : prev.filter((item) => item !== asset.id)
+                            )
+                          }
+                          className="mt-1"
+                        />
+                        <span>
+                          <strong>{asset.name}</strong>
+                          {asset.is_favorite && <span className="ml-2 rounded bg-yellow-100 px-2 py-0.5 text-xs text-yellow-700">收藏</span>}
+                          <span className="mt-1 block text-gray-600">{asset.file_name}</span>
+                        </span>
+                      </label>
+                    ))}
+                    {visibleAssets.length === 0 && <div className="text-sm text-gray-400">还没有保存的参考材料。</div>}
                   </div>
                 </div>
               </div>
             </div>
 
-            <div className="bg-white rounded-lg shadow">
-              <div className="p-6">
-                <h2 className="text-lg font-bold mb-4">AI 生成设置</h2>
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium mb-2">AI 提供商</label>
-                    <select
-                      value={provider}
-                      onChange={(event) => {
-                        const nextProvider = event.target.value as ProviderInfo['id'];
-                        setProvider(nextProvider);
-                        localStorage.setItem('lastUsedProvider', nextProvider);
-                      }}
-                      className="w-full px-3 py-2 border rounded-md"
-                      disabled={!providers.length}
-                    >
-                      {providers.length === 0 ? (
-                        <option value="">当前未启用任何平台 AI</option>
-                      ) : (
-                        providers.map((item) => (
-                          <option key={item.id} value={item.id}>
-                            {item.label}
-                          </option>
-                        ))
-                      )}
-                    </select>
+            <div className="rounded-2xl bg-white p-6 shadow-sm">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-bold">版本历史</h2>
+                {currentDraftId && <span className="text-xs text-gray-500">{versions.length} 个快照</span>}
+              </div>
+              <div className="mt-4 max-h-[360px] space-y-3 overflow-y-auto">
+                {versions.map((version) => (
+                  <div key={version.id} className="rounded-xl border border-gray-200 p-3 text-sm">
+                    <div className="font-medium">{version.change_summary || version.stage}</div>
+                    <div className="mt-1 text-xs text-gray-500">{new Date(version.created_at).toLocaleString('zh-CN')}</div>
+                    <button onClick={() => handleRestoreVersion(version.id)} className="mt-3 text-blue-600 hover:underline">
+                      恢复到此版本
+                    </button>
                   </div>
-
-                  <div>
-                    <label className="block text-sm font-medium mb-2">仿写模式（可选）</label>
-                    <div className="text-xs text-gray-500 mb-2">上传参考公文，AI 将学习其写作风格</div>
-                    {!referenceFile ? (
-                      <input
-                        type="file"
-                        accept=".docx,.pdf,.txt"
-                        onChange={handleReferenceUpload}
-                        className="w-full px-3 py-2 border rounded-md text-sm"
-                      />
-                    ) : (
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between bg-gray-50 px-3 py-2 rounded">
-                          <span className="text-sm">{referenceFile.name}</span>
-                          <button onClick={handleRemoveReference} className="text-red-600 text-sm">
-                            删除
-                          </button>
-                        </div>
-                        {analyzingReference && <p className="text-sm text-blue-600">分析中...</p>}
-                        {referenceAnalysis && (
-                          <div className="bg-blue-50 p-3 rounded text-sm space-y-1">
-                            <p>
-                              <strong>语气：</strong>
-                              {referenceAnalysis.tone}
-                            </p>
-                            <p>
-                              <strong>结构：</strong>
-                              {referenceAnalysis.structure}
-                            </p>
-                            <p>
-                              <strong>用词：</strong>
-                              {referenceAnalysis.vocabulary}
-                            </p>
-                          </div>
-                        )}
-                        {referenceAnalysis && (
-                          <div>
-                            <label className="block text-sm font-medium mb-2">仿写强度</label>
-                            <div className="flex gap-2">
-                              {[
-                                { value: 'strict', label: '严格' },
-                                { value: 'moderate', label: '适中' },
-                                { value: 'loose', label: '宽松' },
-                              ].map((option) => (
-                                <button
-                                  key={option.value}
-                                  onClick={() => setImitationStrength(option.value as 'strict' | 'moderate' | 'loose')}
-                                  className={`flex-1 py-2 rounded-md text-sm ${
-                                    imitationStrength === option.value ? 'bg-blue-600 text-white' : 'bg-gray-100 hover:bg-gray-200'
-                                  }`}
-                                >
-                                  {option.label}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  <button
-                    onClick={handlePolish}
-                    disabled={loading || !providers.length}
-                    className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white py-3 rounded-lg font-medium transition-colors"
-                  >
-                    {loading ? '生成中...' : '生成文档'}
-                  </button>
-                </div>
+                ))}
+                {currentDraftId && versions.length === 0 && <div className="text-sm text-gray-400">关键节点快照会显示在这里。</div>}
+                {!currentDraftId && <div className="text-sm text-gray-400">生成或保存草稿后会出现版本历史。</div>}
               </div>
             </div>
           </div>
 
-          <div className="flex flex-col gap-6 h-full">
-            <div className="bg-white rounded-lg shadow">
-              <div className="p-6">
-                <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-lg font-bold">预览</h2>
-                  {generatedContent && (
+          <div className="space-y-6">
+            <StageTabs
+              currentStep={currentStep}
+              onChange={setCurrentStep}
+              canVisitPlanning={canVisitPlanning}
+              canVisitOutline={canVisitOutline}
+              canVisitDraft={canVisitDraft}
+              canVisitReview={canVisitReview}
+            />
+
+            <div className="rounded-2xl bg-white p-6 shadow-sm">
+              {currentStep === 'intake' && (
+                <div className="space-y-6">
+                  <div>
+                    <h2 className="text-lg font-bold">信息采集</h2>
+                    <p className="mt-1 text-sm text-gray-500">AI 会根据当前信息识别缺口，并用 1-3 个高价值问题继续追问。</p>
+                  </div>
+
+                  {Object.keys(collectedFacts).length > 0 && (
+                    <div className="rounded-xl bg-gray-50 p-4">
+                      <div className="text-sm font-medium">已采集事实</div>
+                      <div className="mt-3 grid gap-3 md:grid-cols-2">
+                        {Object.entries(collectedFacts).map(([key, value]) => (
+                          <div key={key} className="rounded-lg bg-white px-3 py-2 text-sm">
+                            <div className="text-xs uppercase tracking-wide text-gray-400">{key}</div>
+                            <div className="mt-1 text-gray-700">{formatFactValue(value)}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="grid gap-4 xl:grid-cols-2">
+                    <div className="rounded-xl border border-gray-200 p-4">
+                      <div className="text-sm font-medium">当前状态</div>
+                      <div className={`mt-3 inline-flex rounded-full px-3 py-1 text-xs font-medium ${readiness === 'ready' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                        {readiness === 'ready' ? '信息已基本齐备，可生成提纲' : '信息仍需补充'}
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {missingFields.length > 0 ? (
+                          missingFields.map((field) => (
+                            <span key={field} className="rounded-full bg-red-50 px-3 py-1 text-xs text-red-700">
+                              {field}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-sm text-gray-500">当前没有阻塞提纲生成的关键缺口。</span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-gray-200 p-4">
+                      <div className="text-sm font-medium">AI 下一轮建议追问</div>
+                      <div className="mt-3 space-y-3">
+                        {nextQuestions.length > 0 ? (
+                          nextQuestions.map((question) => (
+                            <div key={question.id} className="rounded-lg bg-gray-50 px-3 py-3 text-sm">
+                              <div className="font-medium">{question.label}</div>
+                              <div className="mt-1 text-gray-600">{question.question}</div>
+                              <div className="mt-2 text-xs text-gray-400">{question.placeholder}</div>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="text-sm text-gray-500">先点击下方按钮，让 AI 根据你的输入整理并追问。</div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="mb-2 block text-sm font-medium">继续补充给 AI 的说明</label>
+                    <textarea
+                      value={intakeMessage}
+                      onChange={(event) => setIntakeMessage(event.target.value)}
+                      className="min-h-[140px] w-full rounded-lg border px-3 py-2"
+                      placeholder="例如：请示事项主要是申请专项资金，前期我们已完成方案论证，但仍缺正式批复。"
+                    />
+                  </div>
+
+                  <div className="flex flex-wrap gap-3">
                     <button
-                      onClick={() => {
-                        if (isEditing && editableRef.current) {
-                          const paragraphs = Array.from(editableRef.current.querySelectorAll('p'));
-                          setGeneratedContent(paragraphs.map((paragraph) => paragraph.textContent || '').join('\n'));
-                        }
-                        setIsEditing((prev) => !prev);
-                      }}
-                      className="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded"
+                      onClick={handleIntake}
+                      disabled={busy || !providers.length}
+                      className="rounded-lg bg-blue-600 px-5 py-3 text-white hover:bg-blue-700 disabled:bg-gray-400"
                     >
-                      {isEditing ? '预览' : '编辑'}
+                      {busyAction === 'intake' ? '整理中...' : '让 AI 继续追问并整理事实'}
                     </button>
+                    <button
+                      onClick={handleGeneratePlanning}
+                      disabled={busy || !canVisitPlanning}
+                      className="rounded-lg border border-blue-200 px-5 py-3 text-blue-700 hover:bg-blue-50 disabled:border-gray-200 disabled:text-gray-400"
+                    >
+                      {busyAction === 'planning' ? '生成中...' : '进入结构共创'}
+                    </button>
+                    <button
+                      onClick={() => handleGenerateOutline('direct')}
+                      disabled={busy || !canVisitPlanning}
+                      className="rounded-lg border border-blue-200 px-5 py-3 text-blue-700 hover:bg-blue-50 disabled:border-gray-200 disabled:text-gray-400"
+                    >
+                      直接生成提纲
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {currentStep === 'planning' && (
+                <div className="space-y-6">
+                  <div>
+                    <h2 className="text-lg font-bold">结构共创</h2>
+                    <p className="mt-1 text-sm text-gray-500">AI 会先给你 3 种结构方案。先选方向，再微调段数、顺序和每段主题，最后再生成正式提纲。</p>
+                  </div>
+
+                  {planningOptions.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-gray-300 p-8 text-center">
+                      <p className="text-sm text-gray-500">还没有结构方案，先让 AI 给出几种明显不同的组织思路。</p>
+                      <div className="mt-4 flex flex-wrap justify-center gap-3">
+                        <button onClick={handleGeneratePlanning} disabled={busy} className="rounded-lg bg-blue-600 px-5 py-3 text-white hover:bg-blue-700 disabled:bg-gray-400">
+                          {busyAction === 'planning' ? '生成中...' : 'AI 生成结构建议'}
+                        </button>
+                        <button onClick={() => handleGenerateOutline('direct')} disabled={busy} className="rounded-lg border border-blue-200 px-5 py-3 text-blue-700 hover:bg-blue-50 disabled:text-gray-400">
+                          直接生成提纲
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="grid gap-4 xl:grid-cols-3">
+                        {planningOptions.map((option) => (
+                          <button
+                            key={option.planId}
+                            type="button"
+                            onClick={() => selectPlanningOption(option)}
+                            className={`rounded-2xl border p-5 text-left transition-colors ${
+                              selectedPlanId === option.planId
+                                ? 'border-blue-500 bg-blue-50 shadow-sm'
+                                : 'border-gray-200 bg-white hover:border-blue-300'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="text-base font-semibold">{option.label}</div>
+                              <span className="rounded-full bg-white px-3 py-1 text-xs text-gray-500">{option.sections.length} 段</span>
+                            </div>
+                            <div className="mt-2 text-sm text-blue-700">{option.strategy}</div>
+                            <div className="mt-3 text-sm leading-6 text-gray-600">{option.whyThisWorks}</div>
+                            <div className="mt-4 space-y-2">
+                              {option.sections.map((section, index) => (
+                                <div key={section.id} className="rounded-lg bg-white/90 px-3 py-2 text-sm text-gray-700">
+                                  <div className="font-medium">{index + 1}. {section.headingDraft}</div>
+                                  <div className="mt-1 text-xs text-gray-500">{section.topicSummary}</div>
+                                </div>
+                              ))}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+
+                      <div className="rounded-2xl border border-gray-200 p-5">
+                        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+                          <div>
+                            <div className="text-base font-semibold">当前选中的结构方案</div>
+                            <div className="mt-1 text-sm text-gray-500">继续调整段落标题、本段内容和顺序即可。AI 的结构说明默认折叠，不会干扰主编辑流程。</div>
+                          </div>
+                          <div className="flex flex-wrap gap-3">
+                            <button onClick={handleGeneratePlanning} disabled={busy} className="rounded-lg border border-blue-200 px-4 py-2 text-blue-700 hover:bg-blue-50 disabled:text-gray-400">
+                              {busyAction === 'planning' ? '生成中...' : '换一批结构方案'}
+                            </button>
+                            <button onClick={() => handleGenerateOutline('direct')} disabled={busy} className="rounded-lg border border-gray-200 px-4 py-2 hover:bg-gray-50 disabled:text-gray-400">
+                              直接生成提纲
+                            </button>
+                            <button onClick={() => handleGenerateOutline('fromPlan')} disabled={busy || planningSections.length === 0} className="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:bg-gray-400">
+                              基于该结构生成正式提纲
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="mt-5 space-y-4">
+                          {planningSections.map((section, index) => (
+                            <div key={section.id} className="rounded-xl border border-gray-200 p-4">
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="rounded-full bg-blue-50 px-3 py-1 text-sm font-semibold text-blue-700">第 {index + 1} 段</div>
+                                <div className="flex flex-wrap gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      updatePlanningSections((current) => {
+                                        if (index === 0) return current;
+                                        const next = [...current];
+                                        [next[index - 1], next[index]] = [next[index], next[index - 1]];
+                                        return next;
+                                      })
+                                    }
+                                    disabled={index === 0}
+                                    className="rounded-lg border border-gray-200 px-3 py-2 text-sm hover:bg-gray-50 disabled:text-gray-300"
+                                  >
+                                    上移
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      updatePlanningSections((current) => {
+                                        if (index === current.length - 1) return current;
+                                        const next = [...current];
+                                        [next[index], next[index + 1]] = [next[index + 1], next[index]];
+                                        return next;
+                                      })
+                                    }
+                                    disabled={index === planningSections.length - 1}
+                                    className="rounded-lg border border-gray-200 px-3 py-2 text-sm hover:bg-gray-50 disabled:text-gray-300"
+                                  >
+                                    下移
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      updatePlanningSections((current) => current.filter((_, currentIndex) => currentIndex !== index))
+                                    }
+                                    className="rounded-lg border border-red-200 px-3 py-2 text-sm text-red-700 hover:bg-red-50"
+                                  >
+                                    删除
+                                  </button>
+                                </div>
+                              </div>
+
+                              <div className="mt-4 space-y-4">
+                                <div>
+                                  <label className="mb-2 block text-sm font-medium">段落标题</label>
+                                  <textarea
+                                    value={section.headingDraft}
+                                    onChange={(event) =>
+                                      updatePlanningSections((current) =>
+                                        current.map((item, currentIndex) =>
+                                          currentIndex === index ? { ...item, headingDraft: event.target.value } : item
+                                        )
+                                      )
+                                    }
+                                    className="min-h-[92px] w-full rounded-lg border px-3 py-2"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="mb-2 block text-sm font-medium">本段内容</label>
+                                  <textarea
+                                    value={section.topicSummary}
+                                    onChange={(event) =>
+                                      updatePlanningSections((current) =>
+                                        current.map((item, currentIndex) =>
+                                          currentIndex === index ? { ...item, topicSummary: event.target.value } : item
+                                        )
+                                      )
+                                    }
+                                    className="min-h-[92px] w-full rounded-lg border px-3 py-2"
+                                  />
+                                </div>
+
+                                <details className="rounded-xl border border-gray-200 bg-gray-50">
+                                  <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-gray-700">
+                                    AI 结构说明
+                                  </summary>
+                                  <div className="space-y-3 border-t border-gray-200 px-4 py-4 text-sm text-gray-700">
+                                    <div>
+                                      <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">这一段的作用</div>
+                                      <p className="mt-1 leading-6">{section.purpose || '生成正式提纲时将自动补全。'}</p>
+                                    </div>
+                                    <div>
+                                      <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">为什么排在这里</div>
+                                      <p className="mt-1 leading-6">{section.orderReason || '生成正式提纲时将自动补全。'}</p>
+                                    </div>
+                                    <p className="text-xs leading-5 text-gray-500">
+                                      你修改段落标题、本段内容或顺序后，这里的说明会在生成正式提纲时自动同步更新。
+                                    </p>
+                                  </div>
+                                </details>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            updatePlanningSections((current) => [
+                              ...current,
+                              {
+                                id: `planning-${Date.now()}`,
+                                headingDraft: '',
+                                purpose: '',
+                                topicSummary: '',
+                                orderReason: '',
+                              },
+                            ])
+                          }
+                          disabled={planningSections.length >= MAX_PLANNING_SECTIONS}
+                          className="mt-4 rounded-lg border border-blue-200 px-4 py-2 text-blue-700 hover:bg-blue-50 disabled:border-gray-200 disabled:bg-gray-50 disabled:text-gray-400"
+                        >
+                          {planningSections.length >= MAX_PLANNING_SECTIONS ? `最多 ${MAX_PLANNING_SECTIONS} 段` : '新增一段'}
+                        </button>
+                      </div>
+                    </>
                   )}
                 </div>
-                <div className="h-[600px] overflow-y-auto border rounded">
-                  {generatedContent ? (
-                    isEditing ? (
-                      <div
-                        ref={editableRef}
-                        contentEditable
-                        suppressContentEditableWarning
-                        dangerouslySetInnerHTML={{
-                          __html: generatedContent
-                            .split('\n')
-                            .filter((line) => line.trim())
-                            .map((line) => `<p class="indent-8" style="text-indent: 2em;">${line}</p>`)
-                            .join(''),
-                        }}
-                        className="text-sm p-8 bg-white outline-none"
-                        style={{ lineHeight: '1.75' }}
-                      />
+              )}
+
+              {currentStep === 'outline' && (
+                <div className="space-y-6">
+                  <div>
+                    <h2 className="text-lg font-bold">提纲确认</h2>
+                    <p className="mt-1 text-sm text-gray-500">先确认标题和提纲结构，再进入正文生成，能显著降低返工。</p>
+                  </div>
+
+                  {outlineSections.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-gray-300 p-8 text-center">
+                      <p className="text-sm text-gray-500">还没有正式提纲，先完成结构共创，或者直接生成一版正式提纲。</p>
+                      <button onClick={() => handleGenerateOutline(planningSections.length > 0 ? 'fromPlan' : 'direct')} disabled={busy} className="mt-4 rounded-lg bg-blue-600 px-5 py-3 text-white hover:bg-blue-700 disabled:bg-gray-400">
+                        {busyAction === 'outline' ? '生成中...' : '生成提纲'}
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="rounded-xl bg-gray-50 p-4">
+                        <div className="text-sm font-medium">标题建议</div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {titleOptions.map((title) => (
+                            <button
+                              key={title}
+                              onClick={() => setFormData((prev) => ({ ...prev, title }))}
+                              className={`rounded-full px-4 py-2 text-sm ${
+                                formData.title === title ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-blue-50'
+                              }`}
+                            >
+                              {title}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {outlineRisks.length > 0 && (
+                        <div className="rounded-xl bg-yellow-50 p-4 text-sm text-yellow-800">
+                          <div className="font-medium">AI 风险提醒</div>
+                          <div className="mt-2 space-y-2">
+                            {outlineRisks.map((risk) => (
+                              <div key={risk}>{risk}</div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="space-y-4">
+                        {outlineSections.map((section, index) => (
+                          <div key={section.id} className="rounded-xl border border-gray-200 p-4">
+                            <div className="grid gap-3 xl:grid-cols-[minmax(320px,1.2fr),1.8fr]">
+                              <div>
+                                <label className="mb-2 block text-sm font-medium">小标题</label>
+                                <textarea
+                                value={section.heading}
+                                onChange={(event) =>
+                                  setOutlineSections((prev) =>
+                                    prev.map((item, current) => (current === index ? { ...item, heading: event.target.value } : item))
+                                  )
+                                }
+                                className="min-h-[104px] w-full resize-y rounded-lg border px-3 py-2 text-base leading-relaxed"
+                              />
+                              </div>
+                              <div>
+                                <label className="mb-2 block text-sm font-medium">本段目的</label>
+                                <textarea
+                                value={section.purpose}
+                                onChange={(event) =>
+                                  setOutlineSections((prev) =>
+                                    prev.map((item, current) => (current === index ? { ...item, purpose: event.target.value } : item))
+                                  )
+                                }
+                                className="min-h-[104px] w-full rounded-lg border px-3 py-2"
+                              />
+                              </div>
+                            </div>
+                            <div className="mt-3">
+                              <div className="mb-2 flex items-center justify-between gap-3">
+                                <label className="block text-sm font-medium">关键要点</label>
+                                <button
+                                  type="button"
+                                  onClick={() => updateOutlineKeyPoints(index, (current) => [...current, ''])}
+                                  className="rounded-lg border border-blue-200 px-3 py-1.5 text-sm text-blue-700 hover:bg-blue-50"
+                                >
+                                  新增一条
+                                </button>
+                              </div>
+                              <div className="space-y-3">
+                                {(section.keyPoints.length > 0 ? section.keyPoints : ['']).map((point, pointIndex) => (
+                                  <div key={`${section.id}-${pointIndex}`} className="flex items-start gap-3">
+                                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-50 text-sm font-semibold text-blue-700">
+                                      {pointIndex + 1}
+                                    </div>
+                                    <input
+                                      type="text"
+                                      value={point}
+                                      onChange={(event) =>
+                                        updateOutlineKeyPoints(index, (current) => {
+                                          const next = current.length > 0 ? [...current] : [''];
+                                          next[pointIndex] = event.target.value;
+                                          return next;
+                                        })
+                                      }
+                                      className="flex-1 rounded-lg border px-3 py-2"
+                                      placeholder={`请输入第 ${pointIndex + 1} 条关键要点`}
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        updateOutlineKeyPoints(index, (current) =>
+                                          current.filter((_, currentIndex) => currentIndex !== pointIndex)
+                                        )
+                                      }
+                                      className="rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50"
+                                    >
+                                      删除
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="flex flex-wrap gap-3">
+                        <button onClick={() => handleGenerateOutline(planningSections.length > 0 ? 'fromPlan' : 'direct')} disabled={busy} className="rounded-lg border border-blue-200 px-5 py-3 text-blue-700 hover:bg-blue-50 disabled:text-gray-400">
+                          让 AI 重排提纲
+                        </button>
+                        <button onClick={handleConfirmOutline} className="rounded-lg bg-blue-600 px-5 py-3 text-white hover:bg-blue-700">
+                          确认提纲并进入正文
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {currentStep === 'draft' && (
+                <div className="space-y-6">
+                  <div>
+                    <h2 className="text-lg font-bold">分段成文</h2>
+                    <p className="mt-1 text-sm text-gray-500">正文按段生成，后续优先做段落级改写，全文改写作为兜底。</p>
+                  </div>
+
+                  {sections.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-gray-300 p-8 text-center">
+                      <p className="text-sm text-gray-500">提纲已经准备好，现在可以生成正文。</p>
+                      <button onClick={() => handleGenerateDraft('full')} disabled={busy} className="mt-4 rounded-lg bg-blue-600 px-5 py-3 text-white hover:bg-blue-700 disabled:bg-gray-400">
+                        {busyAction === 'draft' ? '生成中...' : '按提纲生成正文'}
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      {selectedText && (
+                        <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
+                          <div className="text-sm font-medium text-blue-900">已选中文本</div>
+                          <div className="mt-2 text-sm text-blue-800">{selectedText}</div>
+                          <div className="mt-3 flex gap-2">
+                            <input
+                              type="text"
+                              value={selectionInstruction}
+                              onChange={(event) => setSelectionInstruction(event.target.value)}
+                              className="flex-1 rounded-lg border px-3 py-2 text-sm"
+                              placeholder="例如：把这句话改得更凝练、更像请示语气"
+                            />
+                            <button
+                              onClick={() => handleRevise('selection', '', selectionInstruction)}
+                              disabled={busy || !selectionInstruction.trim()}
+                              className="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700 disabled:bg-gray-400"
+                            >
+                              改写选中内容
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="rounded-xl bg-gray-50 p-4">
+                        <div className="text-sm font-medium">整稿协作</div>
+                        <div className="mt-3 flex flex-col gap-3 xl:flex-row">
+                          <input
+                            type="text"
+                            value={fullInstruction}
+                            onChange={(event) => setFullInstruction(event.target.value)}
+                            className="flex-1 rounded-lg border px-3 py-2"
+                            placeholder="例如：整体语气再严肃一些，第二部分再补充执行要求"
+                          />
+                          <button
+                            onClick={() => handleRevise('full', '', fullInstruction)}
+                            disabled={busy || !fullInstruction.trim()}
+                            className="rounded-lg border border-blue-200 px-4 py-2 text-blue-700 hover:bg-blue-50 disabled:text-gray-400"
+                          >
+                            AI 修改整稿
+                          </button>
+                          <button onClick={handleRunReview} disabled={busy} className="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:bg-gray-400">
+                            去做定稿检查
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="space-y-4">
+                        {sections.map((section) => (
+                          <div key={section.id} className="rounded-xl border border-gray-200 p-4">
+                            <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
+                              <input
+                                type="text"
+                                value={section.heading}
+                                onChange={(event) =>
+                                  setSections((prev) =>
+                                    prev.map((item) => (item.id === section.id ? { ...item, heading: event.target.value } : item))
+                                  )
+                                }
+                                className="rounded-lg border px-3 py-2 xl:w-64"
+                              />
+                              <button
+                                onClick={() => handleGenerateDraft('section', section.id)}
+                                disabled={busy}
+                                className="rounded-lg border border-gray-200 px-4 py-2 text-sm hover:bg-gray-50"
+                              >
+                                AI 重写本段
+                              </button>
+                            </div>
+                            <textarea
+                              value={section.body}
+                              onChange={(event) =>
+                                setSections((prev) =>
+                                  prev.map((item) => (item.id === section.id ? { ...item, body: event.target.value } : item))
+                                )
+                              }
+                              className="mt-3 min-h-[180px] w-full rounded-lg border px-3 py-2"
+                            />
+                            <div className="mt-3 flex flex-col gap-3 xl:flex-row">
+                              <input
+                                type="text"
+                                value={sectionInstructions[section.id] || ''}
+                                onChange={(event) => setSectionInstructions((prev) => ({ ...prev, [section.id]: event.target.value }))}
+                                className="flex-1 rounded-lg border px-3 py-2"
+                                placeholder="例如：这一段再扩写实施步骤，或改得更像通知口径"
+                              />
+                              <button
+                                onClick={() => handleRevise('section', section.id, sectionInstructions[section.id] || '')}
+                                disabled={busy || !(sectionInstructions[section.id] || '').trim()}
+                                className="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:bg-gray-400"
+                              >
+                                AI 修改本段
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {currentStep === 'review' && (
+                <div className="space-y-6">
+                  <div>
+                    <h2 className="text-lg font-bold">定稿检查</h2>
+                    <p className="mt-1 text-sm text-gray-500">先检查规范性，再决定是否一键修复或直接导出。</p>
+                  </div>
+
+                  <div className="flex flex-wrap gap-3">
+                    <button onClick={handleRunReview} disabled={busy || sections.length === 0} className="rounded-lg bg-blue-600 px-5 py-3 text-white hover:bg-blue-700 disabled:bg-gray-400">
+                      {busyAction === 'review' ? '检查中...' : '重新运行定稿检查'}
+                    </button>
+                    <button onClick={handleDownload} disabled={busy || sections.length === 0} className="rounded-lg bg-green-600 px-5 py-3 text-white hover:bg-green-700 disabled:bg-gray-400">
+                      {busyAction === 'download' ? '导出中...' : '下载 Word 定稿'}
+                    </button>
+                  </div>
+
+                  <div className="space-y-3">
+                    {reviewChecks.length > 0 ? (
+                      reviewChecks.map((check) => (
+                        <div key={check.code} className={`rounded-xl border p-4 ${statusClass(check.status)}`}>
+                          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+                            <div>
+                              <div className="text-xs uppercase tracking-wide opacity-70">{check.code}</div>
+                              <div className="mt-1 font-medium">{check.message}</div>
+                            </div>
+                            {check.fixPrompt && (
+                              <button
+                                onClick={() => handleRevise('full', '', check.fixPrompt)}
+                                disabled={busy}
+                                className="rounded-lg border border-current px-4 py-2 text-sm"
+                              >
+                                一键修复
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))
                     ) : (
-                      <div className="text-sm p-8 select-text bg-white" onMouseUp={handleTextSelect} style={{ lineHeight: '1.75' }}>
-                        <div className="text-center font-bold text-xl mb-4">{formData.title || '未命名文档'}</div>
-                        <div className="h-7" />
-                        <div className="leading-7">{formData.recipient}：</div>
-                        <div className="leading-7">
-                          {generatedContent
+                      <div className="rounded-xl border border-dashed border-gray-300 p-8 text-center text-sm text-gray-500">
+                        先运行一次定稿检查，AI 会列出风险项和一键修复建议。
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-2xl bg-white p-6 shadow-sm">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-bold">实时预览</h2>
+                <span className="text-xs text-gray-500">可在预览区选中文本，再回到“分段成文”做选区改写</span>
+              </div>
+              <div
+                className="mt-4 min-h-[720px] rounded-xl border bg-white p-10 text-sm leading-8"
+                onMouseUp={() => setSelectedText(window.getSelection()?.toString().trim() || '')}
+              >
+                {previewContent ? (
+                  <>
+                    <div className="text-center text-xl font-bold">{formData.title || '未命名文稿'}</div>
+                    <div className="h-8" />
+                    <div>{formData.recipient}：</div>
+                    <div className="mt-2 space-y-4">
+                      {sections.map((section) => (
+                        <div key={section.id}>
+                          <p className="font-medium">{section.heading}</p>
+                          {section.body
                             .split('\n')
                             .filter((line) => line.trim())
                             .map((line, index) => (
@@ -889,104 +2204,37 @@ function GeneratePageContent() {
                               </p>
                             ))}
                         </div>
-                        {attachments.length > 0 && (
-                          <>
-                            <div className="h-7" />
-                            <div className="leading-7">
-                              <span className="inline-block indent-8">附件：</span>
-                              <span className="inline">1. {attachments[0]}</span>
-                            </div>
-                            {attachments.slice(1).map((attachment, index) => (
-                              <div key={attachment + index} className="leading-7 pl-20">
-                                {index + 2}. {attachment}
-                              </div>
-                            ))}
-                            <div className="h-7" />
-                            <div className="h-7" />
-                          </>
-                        )}
-                        <div className="text-right leading-7 pr-8">{formData.issuer}</div>
-                        <div className="text-right leading-7 pr-8">{formData.date}</div>
-                        {formData.contactName && formData.contactPhone && (
-                          <>
-                            <div className="h-7" />
-                            <div className="text-center leading-7">
-                              （联系人：{formData.contactName}，电话：{formData.contactPhone}）
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    )
-                  ) : (
-                    <div className="flex items-center justify-center h-full">
-                      <p className="text-gray-400">点击“生成文档”后，内容将显示在这里</p>
+                      ))}
                     </div>
-                  )}
-                </div>
+                    {attachments.length > 0 && (
+                      <>
+                        <div className="h-8" />
+                        <div>附件：1. {attachments[0]}</div>
+                        {attachments.slice(1).map((attachment, index) => (
+                          <div key={attachment + index} className="pl-16">
+                            {index + 2}. {attachment}
+                          </div>
+                        ))}
+                        <div className="h-8" />
+                        <div className="h-8" />
+                      </>
+                    )}
+                    <div className="pr-8 text-right">{formData.issuer}</div>
+                    <div className="pr-8 text-right">{formData.date}</div>
+                    {formData.contactName && formData.contactPhone && (
+                      <>
+                        <div className="h-8" />
+                        <div className="text-center">
+                          （联系人：{formData.contactName}，电话：{formData.contactPhone}）
+                        </div>
+                      </>
+                    )}
+                  </>
+                ) : (
+                  <div className="flex min-h-[620px] items-center justify-center text-gray-400">提纲确认后，正文预览会显示在这里。</div>
+                )}
               </div>
             </div>
-
-            {generatedContent && (
-              <div className="bg-white rounded-lg shadow p-6">
-                <h2 className="text-lg font-bold mb-4">AI 修改</h2>
-                {selectedText && (
-                  <div className="text-xs text-blue-600 mb-2 p-2 bg-blue-50 rounded">
-                    已选择：{selectedText.substring(0, 50)}
-                    {selectedText.length > 50 ? '...' : ''}
-                  </div>
-                )}
-                <div className="space-y-3">
-                  <div className="max-h-32 overflow-y-auto space-y-2 mb-2">
-                    {chatMessages.map((message, index) => (
-                      <div key={index} className={`text-xs p-2 rounded ${message.role === 'user' ? 'bg-blue-50 text-right' : 'bg-gray-50'}`}>
-                        {message.content}
-                      </div>
-                    ))}
-                  </div>
-                  <div className="flex gap-2 mb-2">
-                    <button
-                      onClick={handleUndo}
-                      disabled={contentHistory.length === 0 || historyIndex >= contentHistory.length - 1}
-                      className="px-3 py-1 text-sm bg-gray-200 hover:bg-gray-300 disabled:bg-gray-100 disabled:text-gray-400 rounded"
-                    >
-                      撤销 {contentHistory.length > 0 ? `(${contentHistory.length})` : ''}
-                    </button>
-                    <button
-                      onClick={handleRedo}
-                      disabled={historyIndex < 0}
-                      className="px-3 py-1 text-sm bg-gray-200 hover:bg-gray-300 disabled:bg-gray-100 disabled:text-gray-400 rounded"
-                    >
-                      恢复
-                    </button>
-                  </div>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={userInput}
-                      onChange={(event) => setUserInput(event.target.value)}
-                      onKeyDown={(event) => event.key === 'Enter' && handleSendMessage()}
-                      placeholder={selectedText ? '对选中内容提出修改意见...' : '提出修改意见...'}
-                      className="flex-1 px-3 py-2 border rounded-md text-sm"
-                      disabled={loading}
-                    />
-                    <button
-                      onClick={handleSendMessage}
-                      disabled={loading || !userInput.trim()}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 text-sm"
-                    >
-                      发送
-                    </button>
-                  </div>
-                  <button
-                    onClick={handleDownload}
-                    disabled={loading}
-                    className="w-full bg-green-600 text-white py-2 rounded-md hover:bg-green-700 disabled:bg-gray-400"
-                  >
-                    {loading ? '导出中...' : '下载 Word 文档'}
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
         </div>
       </div>

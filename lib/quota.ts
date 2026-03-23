@@ -7,6 +7,11 @@ export const DAILY_QUOTAS = {
   polish: 50,
   refine: 80,
   generate: 30,
+  intake: 80,
+  planning: 40,
+  outline: 40,
+  draft: 40,
+  review: 30,
 } as const;
 
 export type UsageAction = keyof typeof DAILY_QUOTAS;

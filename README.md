@@ -53,13 +53,14 @@ GLM_MODEL=glm-4-flash
 
 ### 3. 初始化 Supabase
 
-在 Supabase SQL Editor 或 Supabase CLI 中执行：
+在 Supabase SQL Editor 或 Supabase CLI 中，按文件名顺序执行 `supabase/migrations/` 下的全部 SQL：
 
 ```sql
 supabase/migrations/20260320120000_initial_schema.sql
+supabase/migrations/20260321110000_collaborative_writing_upgrade.sql
 ```
 
-这会创建：
+第一份 migration 会创建：
 
 - `profiles`
 - `documents`
@@ -69,6 +70,18 @@ supabase/migrations/20260320120000_initial_schema.sql
 - `usage_events`
 
 并自动启用 RLS。
+
+第二份 migration 会补齐协作写作能力所需结构：
+
+- `drafts.workflow_stage / collected_facts / missing_fields / outline / sections`
+- `drafts.active_rule_ids / active_reference_ids / version_count`
+- `drafts.generated_title / generated_content`
+- `writing_rules`
+- `reference_assets`
+- `document_versions`
+- `usage_events` 中新增 `intake / outline / draft / review` 动作约束
+
+两份 migration 都执行后，草稿保存、AI 采集/提纲/正文/审校、版本恢复等功能才会正常工作。
 
 如果你打算使用 Supabase CLI，本仓库已提供基础配置：
 
@@ -115,6 +128,7 @@ npm run check:deploy
 - Supabase 关键环境变量是否已填写
 - 是否至少启用了一个平台 AI Provider
 - migration 文件是否存在
+- 会列出当前仓库中的全部 migration，提醒你逐个执行
 
 ### 7. 管理员创建用户
 
@@ -148,7 +162,7 @@ npm run invite:user -- user@example.com ZhangSan Temp#123456
 
 ### 3. 配置 Supabase
 
-- 执行 `supabase/migrations/20260320120000_initial_schema.sql`
+- 按顺序执行 `supabase/migrations/*.sql`
 - 在 `Authentication` 中创建或邀请首批用户
 - 检查 RLS 策略是否生效
 

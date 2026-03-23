@@ -3,9 +3,76 @@ import { z } from 'zod';
 export const docTypeSchema = z.enum(['notice', 'letter', 'request', 'report']);
 export const providerSchema = z.enum(['claude', 'openai', 'doubao', 'glm']);
 export const phraseTypeSchema = z.enum(['recipient', 'issuer']);
+export const workflowStageSchema = z.enum(['intake', 'planning', 'outline', 'draft', 'review', 'done']);
+export const writingRuleTypeSchema = z.enum([
+  'required_phrase',
+  'forbidden_phrase',
+  'tone_rule',
+  'structure_rule',
+  'ending_rule',
+  'organization_fact',
+]);
 
 const limitedString = (label: string, max: number) =>
   z.string().trim().min(1, `${label}不能为空`).max(max, `${label}不能超过 ${max} 个字符`);
+
+const optionalLimitedString = (max: number) => z.string().trim().max(max).optional().default('');
+
+const looseStringValueSchema = z.union([z.string().trim().max(4000), z.array(z.string().trim().max(200)), z.null()]);
+const uuidListSchema = z.array(z.string().uuid()).max(50).default([]);
+
+export const referenceAnalysisSchema = z.object({
+  tone: z.string().trim().max(400),
+  structure: z.string().trim().max(400),
+  vocabulary: z.string().trim().max(400),
+  sentenceStyle: z.string().trim().max(400),
+  logicFlow: z.string().trim().max(400),
+});
+
+export const outlineSectionSchema = z.object({
+  id: z.string().trim().min(1).max(80),
+  heading: z.string().trim().min(1).max(120),
+  purpose: z.string().trim().min(1).max(300),
+  keyPoints: z.array(z.string().trim().min(1).max(200)).max(8).default([]),
+  notes: z.string().trim().max(300).optional().default(''),
+});
+
+export const planningSectionSchema = z.object({
+  id: z.string().trim().min(1).max(80),
+  headingDraft: z.string().trim().min(1).max(160),
+  purpose: z.string().trim().min(1).max(300),
+  topicSummary: z.string().trim().min(1).max(300),
+  orderReason: z.string().trim().min(1).max(300),
+});
+
+export const draftPlanningSectionSchema = z.object({
+  id: z.string().trim().min(1).max(80),
+  headingDraft: z.string().trim().max(160).optional().default(''),
+  purpose: z.string().trim().max(300).optional().default(''),
+  topicSummary: z.string().trim().max(300).optional().default(''),
+  orderReason: z.string().trim().max(300).optional().default(''),
+});
+
+export const planningOptionSchema = z.object({
+  planId: z.string().trim().min(1).max(80),
+  label: z.string().trim().min(1).max(80),
+  strategy: z.string().trim().min(1).max(240),
+  whyThisWorks: z.string().trim().min(1).max(400),
+  sections: z.array(planningSectionSchema).min(1).max(8),
+});
+
+export const draftSectionSchema = z.object({
+  id: z.string().trim().min(1).max(80),
+  heading: z.string().trim().min(1).max(120),
+  body: z.string().trim().min(1).max(4000),
+});
+
+export const reviewCheckSchema = z.object({
+  code: z.string().trim().min(1).max(80),
+  status: z.enum(['pass', 'warning', 'fail']),
+  message: z.string().trim().min(1).max(400),
+  fixPrompt: z.string().trim().max(500).optional().default(''),
+});
 
 export const loginSchema = z.object({
   email: z.string().trim().email('请输入有效邮箱'),
@@ -39,15 +106,46 @@ export const phraseSchema = z.object({
 export const draftSchema = z.object({
   id: z.string().uuid().optional().nullable(),
   docType: docTypeSchema,
-  title: z.string().trim().max(200, '标题不能超过 200 个字符').optional().default(''),
-  recipient: z.string().trim().max(200, '主送机关不能超过 200 个字符').optional().default(''),
-  content: z.string().trim().max(12000, '内容不能超过 12000 个字符').optional().default(''),
-  issuer: z.string().trim().max(200, '发文机关不能超过 200 个字符').optional().default(''),
-  date: z.string().trim().max(20, '日期格式不正确').optional().default(''),
+  title: optionalLimitedString(200),
+  recipient: optionalLimitedString(200),
+  content: optionalLimitedString(12000),
+  issuer: optionalLimitedString(200),
+  date: optionalLimitedString(20),
   provider: providerSchema,
-  contactName: z.string().trim().max(80, '联系人不能超过 80 个字符').optional().default(''),
-  contactPhone: z.string().trim().max(40, '电话不能超过 40 个字符').optional().default(''),
+  contactName: optionalLimitedString(80),
+  contactPhone: optionalLimitedString(40),
   attachments: z.array(z.string().trim().min(1).max(120)).max(10).default([]),
+  workflowStage: workflowStageSchema.optional().default('intake'),
+  collectedFacts: z.record(z.string(), looseStringValueSchema).optional().default({}),
+  missingFields: z.array(z.string().trim().min(1).max(80)).max(20).default([]),
+  outline: z
+    .object({
+      titleOptions: z.array(z.string().trim().min(1).max(200)).max(5).default([]),
+      sections: z.array(outlineSectionSchema).max(12).default([]),
+      risks: z.array(z.string().trim().min(1).max(240)).max(8).default([]),
+      outlineVersion: z.string().trim().max(80).optional().default(''),
+      confirmed: z.boolean().optional().default(false),
+    })
+    .nullable()
+    .optional()
+    .default(null),
+  planning: z
+    .object({
+      options: z.array(planningOptionSchema).max(5).default([]),
+      selectedPlanId: z.string().trim().max(80).optional().default(''),
+      sections: z.array(draftPlanningSectionSchema).max(8).default([]),
+      planVersion: z.string().trim().max(80).optional().default(''),
+      confirmed: z.boolean().optional().default(false),
+    })
+    .nullable()
+    .optional()
+    .default(null),
+  sections: z.array(draftSectionSchema).max(12).default([]),
+  activeRuleIds: uuidListSchema,
+  activeReferenceIds: uuidListSchema,
+  versionCount: z.number().int().min(0).optional().default(0),
+  generatedTitle: optionalLimitedString(200),
+  generatedContent: optionalLimitedString(20000),
 });
 
 export const polishSchema = z.object({
@@ -57,16 +155,7 @@ export const polishSchema = z.object({
   content: limitedString('内容', 12000),
   provider: providerSchema,
   attachments: z.array(z.string().trim().min(1).max(120)).max(10).default([]),
-  referenceAnalysis: z
-    .object({
-      tone: z.string().trim().max(400),
-      structure: z.string().trim().max(400),
-      vocabulary: z.string().trim().max(400),
-      sentenceStyle: z.string().trim().max(400),
-      logicFlow: z.string().trim().max(400),
-    })
-    .optional()
-    .nullable(),
+  referenceAnalysis: referenceAnalysisSchema.optional().nullable(),
   imitationStrength: z.enum(['strict', 'moderate', 'loose']).optional().default('moderate'),
 });
 
@@ -85,6 +174,7 @@ export const analyzeReferenceSchema = z.object({
 });
 
 export const generateSchema = z.object({
+  draftId: z.string().uuid().optional().nullable(),
   docType: docTypeSchema,
   title: limitedString('标题', 200),
   recipient: limitedString('主送机关', 200),
@@ -96,6 +186,7 @@ export const generateSchema = z.object({
   attachments: z.array(z.string().trim().min(1).max(120)).max(10).default([]),
   contactName: z.string().trim().max(80).optional().default(''),
   contactPhone: z.string().trim().max(40).optional().default(''),
+  sections: z.array(draftSectionSchema).max(12).optional().default([]),
 });
 
 export const deleteIdSchema = z.object({
@@ -108,4 +199,108 @@ export const historyQuerySchema = z.object({
 
 export const uploadDocTypeSchema = z.object({
   docType: docTypeSchema,
+});
+
+export const writingRuleSchema = z.object({
+  id: z.string().uuid().optional().nullable(),
+  name: limitedString('规则名称', 120),
+  docType: docTypeSchema.nullable().optional().default(null),
+  ruleType: writingRuleTypeSchema,
+  content: limitedString('规则内容', 1000),
+  priority: z.number().int().min(0).max(100).optional().default(50),
+  enabled: z.boolean().optional().default(true),
+});
+
+export const referenceAssetSchema = z.object({
+  id: z.string().uuid().optional().nullable(),
+  name: limitedString('参考名称', 120),
+  docType: docTypeSchema.nullable().optional().default(null),
+  fileName: limitedString('文件名', 240),
+  fileType: limitedString('文件类型', 40),
+  content: limitedString('参考内容', 30000),
+  analysis: referenceAnalysisSchema.nullable().optional().default(null),
+  isFavorite: z.boolean().optional().default(false),
+});
+
+export const sessionReferenceSchema = z.object({
+  name: limitedString('参考名称', 120),
+  docType: docTypeSchema.nullable().optional().default(null),
+  fileName: limitedString('文件名', 240),
+  fileType: limitedString('文件类型', 40),
+  content: limitedString('参考内容', 30000),
+  analysis: referenceAnalysisSchema.nullable().optional().default(null),
+});
+
+export const intakeSchema = z.object({
+  draftId: z.string().uuid().optional().nullable(),
+  docType: docTypeSchema,
+  provider: providerSchema,
+  answers: z.record(z.string(), looseStringValueSchema).optional().default({}),
+  message: z.string().trim().max(4000).optional().default(''),
+  activeRuleIds: uuidListSchema,
+  activeReferenceIds: uuidListSchema,
+  sessionReferences: z.array(sessionReferenceSchema).max(5).default([]),
+});
+
+export const outlineRequestSchema = z.object({
+  draftId: z.string().uuid(),
+  provider: providerSchema,
+  confirmedPlan: z
+    .object({
+      selectedPlanId: z.string().trim().max(80).optional().default(''),
+      sections: z.array(draftPlanningSectionSchema).min(1).max(8),
+    })
+    .optional()
+    .nullable(),
+  sessionReferences: z.array(sessionReferenceSchema).max(5).default([]),
+});
+
+export const outlinePlanRequestSchema = z.object({
+  draftId: z.string().uuid(),
+  provider: providerSchema,
+  sessionReferences: z.array(sessionReferenceSchema).max(5).default([]),
+});
+
+export const outlineConfirmSchema = z.object({
+  draftId: z.string().uuid(),
+  outlineVersion: z.string().trim().max(80).optional().default(''),
+  acceptedOutline: z.object({
+    title: z.string().trim().max(200).optional().default(''),
+    titleOptions: z.array(z.string().trim().min(1).max(200)).max(5).default([]),
+    sections: z.array(outlineSectionSchema).min(1).max(12),
+    risks: z.array(z.string().trim().min(1).max(240)).max(8).default([]),
+  }),
+});
+
+export const draftRequestSchema = z.object({
+  draftId: z.string().uuid(),
+  provider: providerSchema,
+  mode: z.enum(['full', 'section']).default('full'),
+  sectionId: z.string().trim().max(80).optional().default(''),
+  sessionReferences: z.array(sessionReferenceSchema).max(5).default([]),
+});
+
+export const reviseRequestSchema = z.object({
+  draftId: z.string().uuid(),
+  provider: providerSchema,
+  targetType: z.enum(['selection', 'section', 'full']),
+  targetId: z.string().trim().max(80).optional().default(''),
+  selectedText: z.string().trim().max(2000).optional().default(''),
+  instruction: limitedString('修改指令', 1000),
+  sessionReferences: z.array(sessionReferenceSchema).max(5).default([]),
+});
+
+export const reviewRequestSchema = z.object({
+  draftId: z.string().uuid(),
+  provider: providerSchema,
+  sessionReferences: z.array(sessionReferenceSchema).max(5).default([]),
+});
+
+export const versionQuerySchema = z.object({
+  draftId: z.string().uuid(),
+});
+
+export const versionRestoreSchema = z.object({
+  draftId: z.string().uuid(),
+  versionId: z.string().uuid(),
 });

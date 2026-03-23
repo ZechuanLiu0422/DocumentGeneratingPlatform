@@ -3,7 +3,7 @@ import OpenAI from 'openai';
 import { AppError } from '@/lib/api';
 import { ensureProviderEnabled, getProviderConfig, type Provider } from '@/lib/providers';
 
-type AnalyzeResult = {
+export type AnalyzeResult = {
   tone: string;
   structure: string;
   vocabulary: string;
@@ -11,14 +11,14 @@ type AnalyzeResult = {
   logicFlow: string;
 };
 
-const DOC_TYPE_NAMES = {
+export const DOC_TYPE_NAMES = {
   notice: '通知',
   letter: '函',
   request: '请示',
   report: '报告',
 } as const;
 
-function sanitizeModelOutput(text: string) {
+export function sanitizeModelOutput(text: string) {
   return text.replace(/^```[\w-]*\n?/, '').replace(/\n?```$/, '').trim();
 }
 
@@ -40,7 +40,7 @@ function splitTitleAndContent(text: string) {
   };
 }
 
-async function callModel(provider: Provider, prompt: string) {
+export async function callModel(provider: Provider, prompt: string) {
   ensureProviderEnabled(provider);
   const config = getProviderConfig(provider);
 

@@ -46,6 +46,48 @@ export function createRequestContext(request: NextRequest, route: string, meta: 
   };
 }
 
+function isSchemaMismatchError(error: unknown) {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+
+  const candidate = error as {
+    code?: string;
+    message?: string;
+    details?: string;
+    hint?: string;
+  };
+
+  const rawText = [candidate.message, candidate.details, candidate.hint]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+
+  const knownSchemaMarkers = [
+    'workflow_stage',
+    'collected_facts',
+    'missing_fields',
+    'active_rule_ids',
+    'active_reference_ids',
+    'generated_title',
+    'generated_content',
+    'planning',
+    'drafts_workflow_stage_check',
+    'document_versions',
+    'writing_rules',
+    'reference_assets',
+    'usage_events_action_check',
+    'draft_generated',
+    'outline_confirmed',
+    'review_applied',
+  ];
+
+  return (
+    ['42703', '42P01', '42883'].includes(candidate.code || '') ||
+    knownSchemaMarkers.some((marker) => rawText.includes(marker))
+  );
+}
+
 function normalizeError(error: unknown) {
   if (error instanceof AppError) {
     return error;
@@ -53,6 +95,14 @@ function normalizeError(error: unknown) {
 
   if (error instanceof ZodError) {
     return new AppError(400, error.issues[0]?.message || '请求参数不正确', 'VALIDATION_ERROR');
+  }
+
+  if (isSchemaMismatchError(error)) {
+    return new AppError(
+      500,
+      '数据库结构未完成升级，请执行最新 Supabase migrations（至少包含 20260321110000_collaborative_writing_upgrade.sql 和 20260323150000_outline_planning_upgrade.sql）后重试',
+      'SCHEMA_OUTDATED'
+    );
   }
 
   return new AppError(500, '系统繁忙，请稍后重试', 'INTERNAL_ERROR');

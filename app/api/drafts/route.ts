@@ -12,7 +12,9 @@ export async function GET(request: NextRequest) {
 
     const { data, error } = await supabase
       .from('drafts')
-      .select('id, doc_type, title, recipient, content, issuer, date, provider, contact_name, contact_phone, attachments, updated_at')
+      .select(
+        'id, doc_type, title, recipient, content, issuer, date, provider, contact_name, contact_phone, attachments, workflow_stage, collected_facts, missing_fields, planning, outline, sections, active_rule_ids, active_reference_ids, version_count, generated_title, generated_content, updated_at'
+      )
       .eq('user_id', user.id)
       .order('updated_at', { ascending: false });
 
@@ -24,6 +26,14 @@ export async function GET(request: NextRequest) {
       ...draft,
       contactName: draft.contact_name,
       contactPhone: draft.contact_phone,
+      workflowStage: draft.workflow_stage,
+      collectedFacts: draft.collected_facts || {},
+      missingFields: draft.missing_fields || [],
+      activeRuleIds: draft.active_rule_ids || [],
+      activeReferenceIds: draft.active_reference_ids || [],
+      versionCount: draft.version_count || 0,
+      generatedTitle: draft.generated_title || '',
+      generatedContent: draft.generated_content || '',
     }));
 
     return ok(context, { drafts });
@@ -51,6 +61,17 @@ export async function POST(request: NextRequest) {
       contact_name: body.contactName || null,
       contact_phone: body.contactPhone || null,
       attachments: body.attachments,
+      workflow_stage: body.workflowStage,
+      collected_facts: body.collectedFacts,
+      missing_fields: body.missingFields,
+      planning: body.planning,
+      outline: body.outline,
+      sections: body.sections,
+      active_rule_ids: body.activeRuleIds,
+      active_reference_ids: body.activeReferenceIds,
+      version_count: body.versionCount,
+      generated_title: body.generatedTitle || null,
+      generated_content: body.generatedContent || null,
       updated_at: new Date().toISOString(),
     };
 

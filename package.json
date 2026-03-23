@@ -3,11 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev -H 0.0.0.0",
+    "dev": "node scripts/run-next-dev.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
     "check:deploy": "node --env-file=.env scripts/check-deploy.mjs",
+    "check:schema": "node --env-file=.env.local scripts/check-supabase-schema.mjs",
     "invite:user": "node --env-file=.env scripts/invite-user.mjs"
   },
   "dependencies": {

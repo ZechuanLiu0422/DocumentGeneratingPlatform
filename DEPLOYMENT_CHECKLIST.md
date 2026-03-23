@@ -3,9 +3,11 @@
 ## Supabase
 
 - 已创建 Supabase 项目
-- 已执行 `supabase/migrations/20260320120000_initial_schema.sql`
+- 已按顺序执行 `supabase/migrations/*.sql`
 - `Authentication > Users` 中已创建或邀请首批用户
 - 已确认 `profiles / drafts / documents / contacts / common_phrases / usage_events` 表存在
+- 已确认 `writing_rules / reference_assets / document_versions` 表存在
+- 已确认 `drafts` 表包含 `workflow_stage / collected_facts / missing_fields / outline / sections / active_rule_ids / active_reference_ids / version_count / generated_title / generated_content`
 - 已确认所有表均启用 RLS
 
 ## Vercel Env
