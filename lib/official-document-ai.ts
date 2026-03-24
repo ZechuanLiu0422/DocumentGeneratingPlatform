@@ -11,6 +11,10 @@ export type AnalyzeResult = {
   logicFlow: string;
 };
 
+type ModelCallOptions = {
+  maxTokens?: number;
+};
+
 export const DOC_TYPE_NAMES = {
   notice: '通知',
   letter: '函',
@@ -40,9 +44,10 @@ function splitTitleAndContent(text: string) {
   };
 }
 
-export async function callModel(provider: Provider, prompt: string) {
+export async function callModel(provider: Provider, prompt: string, options: ModelCallOptions = {}) {
   ensureProviderEnabled(provider);
   const config = getProviderConfig(provider);
+  const maxTokens = options.maxTokens ?? 2_000;
 
   try {
     if (provider === 'claude') {
@@ -53,7 +58,7 @@ export async function callModel(provider: Provider, prompt: string) {
 
       const response = await client.messages.create({
         model: config.model,
-        max_tokens: 2_000,
+        max_tokens: maxTokens,
         messages: [{ role: 'user', content: prompt }],
       });
 
@@ -72,7 +77,7 @@ export async function callModel(provider: Provider, prompt: string) {
     const response = await client.chat.completions.create({
       model: config.model,
       messages: [{ role: 'user', content: prompt }],
-      max_tokens: 2_000,
+      max_tokens: maxTokens,
     });
 
     return response.choices[0]?.message?.content?.trim() || '';
