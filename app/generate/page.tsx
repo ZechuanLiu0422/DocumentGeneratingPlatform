@@ -1,7 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useEffect, useState } from 'react';
 
 type Phrase = {
   id: string;
@@ -246,9 +245,6 @@ function StageTabs(props: {
 }
 
 function GeneratePageContent() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-
   const [bootstrapping, setBootstrapping] = useState(true);
   const [pageError, setPageError] = useState('');
   const [phrases, setPhrases] = useState<Phrase[]>([]);
@@ -431,7 +427,7 @@ function GeneratePageContent() {
 
         setProvider(resolvedProvider);
 
-        const draftId = searchParams.get('draft');
+        const draftId = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('draft') : null;
         if (draftId) {
           const draft = (draftsData.drafts || []).find((item: Draft) => item.id === draftId);
           if (draft) {
@@ -455,12 +451,11 @@ function GeneratePageContent() {
     return () => {
       mounted = false;
     };
-  }, [searchParams]);
+  }, []);
 
   const handleLogout = async () => {
     await fetch('/api/logout', { method: 'POST' });
-    router.replace('/login');
-    router.refresh();
+    window.location.replace('/login');
   };
 
   const resetWorkflow = () => {
@@ -1017,6 +1012,23 @@ function GeneratePageContent() {
     }
   };
 
+  const handleRegenerateDraft = async () => {
+    if (!currentDraftId) {
+      alert('请先完成提纲确认');
+      return;
+    }
+
+    if (sections.length > 0) {
+      const confirmed = window.confirm('重新生成正文会用当前已确认提纲覆盖现有正文内容，是否继续？');
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    setReviewChecks([]);
+    await handleGenerateDraft('full');
+  };
+
   const handleRevise = async (targetType: 'selection' | 'section' | 'full', targetId = '', instruction = '') => {
     if (!currentDraftId || !instruction.trim()) {
       alert('请先填写修改指令');
@@ -1205,10 +1217,10 @@ function GeneratePageContent() {
             <button onClick={handleSaveDraft} className="rounded-lg border border-blue-200 px-4 py-2 text-blue-700 hover:bg-blue-50">
               保存草稿
             </button>
-            <button onClick={() => router.push('/settings')} className="rounded-lg border border-gray-200 px-4 py-2 hover:bg-gray-50">
+            <button onClick={() => window.location.assign('/settings')} className="rounded-lg border border-gray-200 px-4 py-2 hover:bg-gray-50">
               设置
             </button>
-            <button onClick={() => router.push('/')} className="rounded-lg border border-gray-200 px-4 py-2 hover:bg-gray-50">
+            <button onClick={() => window.location.assign('/')} className="rounded-lg border border-gray-200 px-4 py-2 hover:bg-gray-50">
               返回首页
             </button>
             <button onClick={handleLogout} className="rounded-lg border border-gray-200 px-4 py-2 hover:bg-gray-50">
@@ -2023,7 +2035,7 @@ function GeneratePageContent() {
                   {sections.length === 0 ? (
                     <div className="rounded-xl border border-dashed border-gray-300 p-8 text-center">
                       <p className="text-sm text-gray-500">提纲已经准备好，现在可以生成正文。</p>
-                      <button onClick={() => handleGenerateDraft('full')} disabled={busy} className="mt-4 rounded-lg bg-blue-600 px-5 py-3 text-white hover:bg-blue-700 disabled:bg-gray-400">
+                      <button onClick={handleRegenerateDraft} disabled={busy} className="mt-4 rounded-lg bg-blue-600 px-5 py-3 text-white hover:bg-blue-700 disabled:bg-gray-400">
                         {busyAction === 'draft' ? '生成中...' : '按提纲生成正文'}
                       </button>
                     </div>
@@ -2068,6 +2080,13 @@ function GeneratePageContent() {
                             className="rounded-lg border border-blue-200 px-4 py-2 text-blue-700 hover:bg-blue-50 disabled:text-gray-400"
                           >
                             AI 修改整稿
+                          </button>
+                          <button
+                            onClick={handleRegenerateDraft}
+                            disabled={busy}
+                            className="rounded-lg border border-amber-200 px-4 py-2 text-amber-700 hover:bg-amber-50 disabled:text-gray-400"
+                          >
+                            {busyAction === 'draft' ? '重新生成中...' : '重新生成正文'}
                           </button>
                           <button onClick={handleRunReview} disabled={busy} className="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:bg-gray-400">
                             去做定稿检查
@@ -2140,6 +2159,9 @@ function GeneratePageContent() {
                   <div className="flex flex-wrap gap-3">
                     <button onClick={handleRunReview} disabled={busy || sections.length === 0} className="rounded-lg bg-blue-600 px-5 py-3 text-white hover:bg-blue-700 disabled:bg-gray-400">
                       {busyAction === 'review' ? '检查中...' : '重新运行定稿检查'}
+                    </button>
+                    <button onClick={handleRegenerateDraft} disabled={busy || sections.length === 0} className="rounded-lg border border-amber-200 px-5 py-3 text-amber-700 hover:bg-amber-50 disabled:text-gray-400">
+                      {busyAction === 'draft' ? '重新生成中...' : '重新生成正文'}
                     </button>
                     <button onClick={handleDownload} disabled={busy || sections.length === 0} className="rounded-lg bg-green-600 px-5 py-3 text-white hover:bg-green-700 disabled:bg-gray-400">
                       {busyAction === 'download' ? '导出中...' : '下载 Word 定稿'}
@@ -2243,9 +2265,5 @@ function GeneratePageContent() {
 }
 
 export default function GeneratePage() {
-  return (
-    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">加载中...</div>}>
-      <GeneratePageContent />
-    </Suspense>
-  );
+  return <GeneratePageContent />;
 }

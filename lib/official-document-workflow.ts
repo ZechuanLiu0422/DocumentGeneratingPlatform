@@ -54,6 +54,26 @@ type ReviseResult = {
 };
 
 type ReviewCheck = z.infer<typeof reviewCheckSchema>;
+type StructuredCallMode = 'fallback' | 'throw';
+type DraftSectionBrief = {
+  id: string;
+  heading: string;
+  mustCover: string[];
+  writingTask: string;
+};
+
+const MODEL_TOKEN_BUDGETS = {
+  intake: 1800,
+  outline: 2400,
+  planning: 2600,
+  draft: 4000,
+  sectionDraft: 2600,
+  revise: 2200,
+  review: 1800,
+} as const;
+
+const MIN_DRAFT_BODY_LENGTH = 50;
+const MIN_SECTION_REWRITE_LENGTH = 40;
 
 const intakeResponseSchema = z.object({
   collectedFacts: z.record(z.string(), z.union([z.string(), z.array(z.string())])).default({}),
@@ -266,13 +286,38 @@ function extractJsonCandidate(text: string) {
   return cleaned.slice(start, end + 1);
 }
 
-async function callStructuredModel<T>(provider: Provider, prompt: string, schema: z.ZodSchema<T>, fallback: T) {
+async function callStructuredModel<T>(
+  provider: Provider,
+  prompt: string,
+  schema: z.ZodSchema<T>,
+  options: {
+    fallback?: T;
+    mode?: StructuredCallMode;
+    maxTokens?: number;
+    errorMessage?: string;
+    errorCode?: string;
+  } = {}
+) {
+  const mode = options.mode || 'fallback';
+
   try {
-    const response = await callModel(provider, prompt);
+    const response = await callModel(provider, prompt, { maxTokens: options.maxTokens });
     const candidate = extractJsonCandidate(response);
     return schema.parse(JSON.parse(candidate));
-  } catch {
-    return fallback;
+  } catch (error) {
+    if (error instanceof AppError) {
+      throw error;
+    }
+
+    if (mode === 'throw') {
+      throw new AppError(
+        502,
+        options.errorMessage || 'AI 返回结果格式不符合要求，请稍后重试',
+        options.errorCode || 'STRUCTURED_OUTPUT_INVALID'
+      );
+    }
+
+    return options.fallback as T;
   }
 }
 
@@ -416,16 +461,276 @@ function normalizeOutlineSections(sections: OutlineSectionRecord[]) {
 }
 
 function normalizeDraftSections(sections: DraftSectionRecord[], outlineSections: OutlineSectionRecord[]) {
-  const byId = new Map(sections.map((section) => [section.id, section]));
+  return outlineSections.map((outline, index) => ({
+    id: outline.id,
+    heading: outline.heading,
+    body: sections[index]?.body?.trim() || '',
+  }));
+}
 
-  return outlineSections.map((outline, index) => {
-    const matched = byId.get(outline.id) || sections[index];
-    return {
-      id: outline.id,
-      heading: matched?.heading?.trim() || outline.heading,
-      body: matched?.body?.trim() || `${outline.purpose}。`,
-    };
+function normalizeCompareText(text: string) {
+  return text.replace(/\s+/g, '').replace(/[，。；：、“”‘’（）()《》【】\-]/g, '').trim();
+}
+
+function buildDraftSectionTask(docType: DocType, section: OutlineSectionRecord, index: number, total: number) {
+  const heading = section.heading.trim();
+
+  if (index === total - 1) {
+    if (docType === 'request') {
+      return '作为收束段，归拢前文论证并自然落到请示事项与规范批示语。';
+    }
+
+    return `作为收束段，归拢前文重点并自然落到“${DOC_TYPE_CONFIG[docType].requiredEnding}”的规范收尾。`;
+  }
+
+  if (/背景|依据|情况|总体/.test(heading) || index === 0) {
+    return '作为前段，先交代背景、依据或总体情况，引出全文主线。';
+  }
+
+  if (/问题|困难|风险/.test(heading)) {
+    return '聚焦当前问题、困难或风险，写成完整分析段，而不是罗列标签。';
+  }
+
+  if (/进展|成效|落实/.test(heading)) {
+    return '围绕已开展工作、阶段成效和落实情况展开，写出连续叙述。';
+  }
+
+  if (/措施|任务|安排|要求|事项|举措/.test(heading)) {
+    return '围绕本段重点任务或具体要求展开，写成完整公文叙述，不要把要点逐条堆砌。';
+  }
+
+  if (/请示|请求|建议/.test(heading)) {
+    return '围绕拟请示、请求或建议事项形成完整论述，保持语气规范、理由充分。';
+  }
+
+  return '作为中间展开段，承接上下文推进主线，形成完整、连贯的公文叙述。';
+}
+
+function buildDraftSectionBriefs(docType: DocType, outlineSections: OutlineSectionRecord[]): DraftSectionBrief[] {
+  return outlineSections.map((section, index) => ({
+    id: section.id,
+    heading: section.heading.trim(),
+    mustCover: Array.from(
+      new Set(
+        [...section.keyPoints, section.notes || '']
+          .map((item) => item.trim())
+          .filter(Boolean)
+      )
+    ).slice(0, 6),
+    writingTask: buildDraftSectionTask(docType, section, index, outlineSections.length),
+  }));
+}
+
+function countQuotedKeyPoints(body: string, keyPoints: string[]) {
+  const normalizedBody = normalizeCompareText(body);
+
+  return keyPoints.filter((point) => {
+    const normalizedPoint = normalizeCompareText(point);
+    return normalizedPoint.length >= 10 && normalizedBody.includes(normalizedPoint);
+  }).length;
+}
+
+function looksLikeOutlineStack(body: string) {
+  const normalized = body.trim();
+  const sentenceCount = (normalized.match(/[。！？]/g) || []).length;
+  const semicolonCount = (normalized.match(/[；;]/g) || []).length;
+  const listMarkerCount = (normalized.match(/(^|\n)[一二三四五六七八九十1-9][、.]/g) || []).length;
+
+  return sentenceCount === 0 || (sentenceCount <= 1 && (semicolonCount >= 2 || listMarkerCount >= 1));
+}
+
+function validateDraftSectionBody(body: string, outline: OutlineSectionRecord, minLength: number) {
+  const reasons: string[] = [];
+  const trimmed = body.trim();
+
+  if (!trimmed) {
+    return ['正文为空'];
+  }
+
+  if (trimmed.length < minLength) {
+    reasons.push(`正文长度不足 ${minLength} 字`);
+  }
+
+  if (looksLikeOutlineStack(trimmed)) {
+    reasons.push('正文更像提纲或要点堆砌，缺少完整叙述句群');
+  }
+
+  const normalizedPurpose = normalizeCompareText(outline.purpose || '');
+  if (normalizedPurpose.length >= 10 && normalizeCompareText(trimmed).includes(normalizedPurpose)) {
+    reasons.push('正文直接复述了提纲目的说明');
+  }
+
+  const quotedKeyPoints = countQuotedKeyPoints(trimmed, outline.keyPoints || []);
+  if (quotedKeyPoints >= 2) {
+    reasons.push('正文直接照抄了多个提纲关键要点');
+  }
+
+  return reasons;
+}
+
+function validateDraftSections(candidateSections: DraftSectionRecord[], outlineSections: OutlineSectionRecord[]) {
+  const reasons: string[] = [];
+
+  if (candidateSections.length !== outlineSections.length) {
+    reasons.push(`段落数量不一致，应为 ${outlineSections.length} 段，实际为 ${candidateSections.length} 段`);
+    return reasons;
+  }
+
+  outlineSections.forEach((outline, index) => {
+    const candidate = candidateSections[index];
+    if (!candidate) {
+      reasons.push(`缺少第 ${index + 1} 段`);
+      return;
+    }
+
+    if (candidate.id.trim() !== outline.id) {
+      reasons.push(`第 ${index + 1} 段 id 不匹配，应为 ${outline.id}`);
+    }
+
+    if (candidate.heading.trim() !== outline.heading.trim()) {
+      reasons.push(`第 ${index + 1} 段标题与已确认提纲不一致，应保持为“${outline.heading}”`);
+    }
+
+    const bodyReasons = validateDraftSectionBody(candidate.body, outline, MIN_DRAFT_BODY_LENGTH);
+    bodyReasons.forEach((reason) => reasons.push(`第 ${index + 1} 段${reason}`));
   });
+
+  return reasons;
+}
+
+function validateRegeneratedSection(section: DraftSectionRecord, outline: OutlineSectionRecord) {
+  const reasons: string[] = [];
+
+  if (section.id.trim() !== outline.id) {
+    reasons.push(`段落 id 不匹配，应为 ${outline.id}`);
+  }
+
+  if (section.heading.trim() !== outline.heading.trim()) {
+    reasons.push(`段落标题与已确认提纲不一致，应保持为“${outline.heading}”`);
+  }
+
+  const bodyReasons = validateDraftSectionBody(section.body, outline, MIN_SECTION_REWRITE_LENGTH);
+  bodyReasons.forEach((reason) => reasons.push(reason));
+
+  return reasons;
+}
+
+function buildDraftPrompt(params: {
+  docType: DocType;
+  facts: Record<string, unknown>;
+  title: string;
+  sectionBriefs: DraftSectionBrief[];
+  rules?: WritingRuleRecord[];
+  references?: ReferenceAssetRecord[];
+  attachments?: string[];
+  repairNotes?: string[];
+}) {
+  return `你是一位资深公文写作专家，请根据已确认的成文 brief 生成${DOC_TYPE_NAMES[params.docType]}正文。
+
+文种要求：${DOC_TYPE_CONFIG[params.docType].purpose}
+固定结尾要求：${DOC_TYPE_CONFIG[params.docType].requiredEnding}
+
+标题：${params.title}
+
+结构化事实：
+${JSON.stringify(mergeFacts(params.facts || {}), null, 2)}
+
+已确认的成文 brief（只作为写作约束，不能照抄 wording）：
+${JSON.stringify(
+    params.sectionBriefs.map((section, index) => ({
+      order: index + 1,
+      id: section.id,
+      heading: section.heading,
+      writingTask: section.writingTask,
+      mustCover: section.mustCover,
+    })),
+    null,
+    2
+  )}
+
+个人规则库：
+${formatRules(params.rules || [])}
+
+参考材料：
+${formatReferences(params.references || [])}
+
+附件：
+${(params.attachments || []).length > 0 ? (params.attachments || []).map((item, index) => `${index + 1}. ${item}`).join('\n') : '无'}
+
+${params.repairNotes?.length ? `上一次结果存在以下问题，请逐条修正：\n${params.repairNotes.map((item, index) => `${index + 1}. ${item}`).join('\n')}\n` : ''}
+要求：
+1. 必须严格按 brief 的顺序逐段生成 sections，段数、id、heading 必须完全一致。
+2. "writingTask" 和 "mustCover" 只是写作约束，不能直接照抄原句，不能把提纲说明写进正文。
+3. 每个 section 的 body 只写正文内容，不重复输出 heading。
+4. 每段必须写成完整公文段落，至少形成 2 句以上连贯叙述，不得只把要点串成列表或分号堆砌。
+5. 段与段之间要有自然承接，正文必须服务于整篇成稿，而不是提纲扩写。
+6. 语言规范、正式、逻辑清晰，不要凭空添加未提供的事实。
+7. 如有附件且正文需要引用，请自然写出“（见附件X）”。
+8. 若为请示，结尾必须落在“妥否，请批示”或近似规范表达；若为报告，结尾必须体现“特此报告”；若为通知，结尾体现“特此通知”。
+
+请严格输出 JSON：
+{
+  "title": "标题",
+  "sections": [
+    { "id": "section-id", "heading": "一、...", "body": "正文内容" }
+  ],
+  "content": "可选，完整正文"
+}`;
+}
+
+function buildSectionRewritePrompt(params: {
+  docType: DocType;
+  facts: Record<string, unknown>;
+  title: string;
+  targetOutline: OutlineSectionRecord;
+  targetBrief: DraftSectionBrief;
+  currentSections: DraftSectionRecord[];
+  rules?: WritingRuleRecord[];
+  references?: ReferenceAssetRecord[];
+  repairNotes?: string[];
+}) {
+  return `你是一位资深公文写作专家，请只重写指定段落。
+
+文种：${DOC_TYPE_NAMES[params.docType]}
+标题：${params.title}
+
+结构化事实：
+${JSON.stringify(mergeFacts(params.facts || {}), null, 2)}
+
+目标段落的成文 brief（只作为写作约束，不能照抄 wording）：
+${JSON.stringify(
+    {
+      id: params.targetBrief.id,
+      heading: params.targetBrief.heading,
+      writingTask: params.targetBrief.writingTask,
+      mustCover: params.targetBrief.mustCover,
+    },
+    null,
+    2
+  )}
+
+当前整篇 sections（用于保持上下文衔接）：
+${JSON.stringify(params.currentSections, null, 2)}
+
+个人规则库：
+${formatRules(params.rules || [])}
+
+参考材料：
+${formatReferences(params.references || [])}
+
+${params.repairNotes?.length ? `上一次结果存在以下问题，请逐条修正：\n${params.repairNotes.map((item, index) => `${index + 1}. ${item}`).join('\n')}\n` : ''}
+要求：
+1. 只返回目标段落，不要改动其他段落。
+2. 返回的 id 和 heading 必须与已确认提纲完全一致。
+3. "writingTask" 和 "mustCover" 只是写作约束，不能直接照抄原句，不能把提纲说明写进正文。
+4. 该段必须写成完整公文段落，和上下文衔接自然，不得写成要点清单或分号堆砌。
+5. 不要凭空添加未提供的事实。
+
+请只输出 JSON：
+{
+  "section": { "id": "${params.targetOutline.id}", "heading": "${params.targetOutline.heading}", "body": "重写后的正文" },
+  "changeSummary": "本次修改摘要"
+}`;
 }
 
 function buildSuggestedTitle(docType: DocType, facts: Record<string, string | string[]>) {
@@ -615,7 +920,10 @@ ${formatReferences(params.references || [])}
   "suggestedTitle": "标题建议"
 }`;
 
-  const aiResult = await callStructuredModel(params.provider, prompt, intakeResponseSchema, fallback);
+  const aiResult = await callStructuredModel(params.provider, prompt, intakeResponseSchema, {
+    fallback,
+    maxTokens: MODEL_TOKEN_BUDGETS.intake,
+  });
   const collectedFacts = mergeFacts(factsBefore, aiResult.collectedFacts);
   const missingFields = getMissingFields(params.docType, collectedFacts);
 
@@ -695,7 +1003,10 @@ ${formatReferences(params.references || [])}
   "risks": ["风险提示"]
 }`;
 
-  const aiResult = await callStructuredModel(params.provider, prompt, outlineResponseSchema, fallback);
+  const aiResult = await callStructuredModel(params.provider, prompt, outlineResponseSchema, {
+    fallback,
+    maxTokens: MODEL_TOKEN_BUDGETS.outline,
+  });
 
   return {
     outlineVersion: `outline-${Date.now()}`,
@@ -778,7 +1089,10 @@ ${formatReferences(params.references || [])}
     params.provider,
     prompt,
     planningResponseSchema,
-    { options: fallbackOptions }
+    {
+      fallback: { options: fallbackOptions },
+      maxTokens: MODEL_TOKEN_BUDGETS.planning,
+    }
   );
 
   return {
@@ -803,63 +1117,65 @@ export async function generateDraftWorkflow(params: {
 
   const facts = mergeFacts(params.facts || {});
   const desiredTitle = params.title?.trim() || buildSuggestedTitle(params.docType, facts);
-  const prompt = `你是一位资深公文写作专家，请根据已确认的提纲生成${DOC_TYPE_NAMES[params.docType]}正文。
+  const sectionBriefs = buildDraftSectionBriefs(params.docType, params.outlineSections);
+  let repairNotes: string[] = [];
 
-文种要求：${DOC_TYPE_CONFIG[params.docType].purpose}
-固定结尾要求：${DOC_TYPE_CONFIG[params.docType].requiredEnding}
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const prompt = buildDraftPrompt({
+      docType: params.docType,
+      facts,
+      title: desiredTitle,
+      sectionBriefs,
+      rules: params.rules,
+      references: params.references,
+      attachments: params.attachments,
+      repairNotes,
+    });
 
-标题：${desiredTitle}
+    try {
+      const aiResult = await callStructuredModel(params.provider, prompt, draftResponseSchema, {
+        mode: 'throw',
+        maxTokens: MODEL_TOKEN_BUDGETS.draft,
+        errorMessage: '正文生成未通过质量校验，请重试或切换模型',
+        errorCode: 'DRAFT_GENERATION_INVALID',
+      });
+      const validationIssues = validateDraftSections(aiResult.sections, params.outlineSections);
 
-结构化事实：
-${JSON.stringify(facts, null, 2)}
+      if (validationIssues.length === 0) {
+        const sections = normalizeDraftSections(aiResult.sections, params.outlineSections);
+        return {
+          title: aiResult.title || desiredTitle,
+          sections,
+          content: aiResult.content || compileSectionsToContent(sections),
+        } satisfies DraftResult;
+      }
 
-已确认提纲：
-${JSON.stringify(params.outlineSections, null, 2)}
+      if (attempt === 0) {
+        repairNotes = validationIssues;
+        continue;
+      }
 
-个人规则库：
-${formatRules(params.rules || [])}
+      throw new AppError(
+        502,
+        `正文生成未通过质量校验，请重试或切换模型：${validationIssues.join('；')}`,
+        'DRAFT_GENERATION_INVALID'
+      );
+    } catch (error) {
+      if (!(error instanceof AppError)) {
+        throw error;
+      }
 
-参考材料：
-${formatReferences(params.references || [])}
+      if (error.code !== 'DRAFT_GENERATION_INVALID' || attempt === 1) {
+        throw error.code === 'DRAFT_GENERATION_INVALID'
+          ? new AppError(502, `${error.message}。请重试或切换模型。`, 'DRAFT_GENERATION_INVALID')
+          : error;
+      }
 
-附件：
-${(params.attachments || []).length > 0 ? (params.attachments || []).map((item, index) => `${index + 1}. ${item}`).join('\n') : '无'}
+      repairNotes = [error.message];
+    }
+  }
 
-要求：
-1. 必须严格按提纲逐段生成 sections。
-2. 每个 section 的 body 只写正文内容，不重复输出 heading。
-3. 语言规范、正式、逻辑清晰，不要凭空添加未提供的事实。
-4. 如有附件且正文需要引用，请自然写出“（见附件X）”。
-5. 若为请示，结尾必须落在“妥否，请批示”或近似规范表达；若为报告，结尾必须体现“特此报告”；若为通知，结尾体现“特此通知”。
-
-请严格输出 JSON：
-{
-  "title": "标题",
-  "sections": [
-    { "id": "section-id", "heading": "一、...", "body": "正文内容" }
-  ],
-  "content": "可选，完整正文"
-}`;
-
-  const fallbackSections = params.outlineSections.map((section) => ({
-    id: section.id,
-    heading: section.heading,
-    body: `${section.purpose}。${section.keyPoints.join('；')}`.trim(),
-  }));
-  const fallback: DraftResult = {
-    title: desiredTitle,
-    sections: fallbackSections,
-    content: compileSectionsToContent(fallbackSections),
-  };
-
-  const aiResult = await callStructuredModel(params.provider, prompt, draftResponseSchema, fallback);
-  const sections = normalizeDraftSections(aiResult.sections, params.outlineSections);
-
-  return {
-    title: aiResult.title || desiredTitle,
-    sections,
-    content: aiResult.content || compileSectionsToContent(sections),
-  } satisfies DraftResult;
+  throw new AppError(502, '正文生成未通过质量校验，请重试或切换模型', 'DRAFT_GENERATION_INVALID');
 }
 
 export async function regenerateSectionWorkflow(params: {
@@ -878,51 +1194,79 @@ export async function regenerateSectionWorkflow(params: {
   if (!targetOutline) {
     throw new AppError(400, '目标段落不存在', 'SECTION_NOT_FOUND');
   }
+  const targetBrief = buildDraftSectionBriefs(params.docType, params.outlineSections).find((section) => section.id === params.targetSectionId);
+  if (!targetBrief) {
+    throw new AppError(400, '目标段落不存在', 'SECTION_NOT_FOUND');
+  }
 
-  const prompt = `你是一位资深公文写作专家，请重写指定段落。
+  let repairNotes: string[] = [];
 
-文种：${DOC_TYPE_NAMES[params.docType]}
-标题：${params.title}
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const prompt = buildSectionRewritePrompt({
+      docType: params.docType,
+      facts: params.facts,
+      title: params.title,
+      targetOutline,
+      targetBrief,
+      currentSections: params.currentSections,
+      rules: params.rules,
+      references: params.references,
+      repairNotes,
+    });
 
-结构化事实：
-${JSON.stringify(mergeFacts(params.facts || {}), null, 2)}
+    try {
+      const aiResult = await callStructuredModel(params.provider, prompt, sectionDraftResponseSchema, {
+        mode: 'throw',
+        maxTokens: MODEL_TOKEN_BUDGETS.sectionDraft,
+        errorMessage: '段落重写未通过质量校验，请重试或切换模型',
+        errorCode: 'SECTION_GENERATION_INVALID',
+      });
+      const validationIssues = validateRegeneratedSection(aiResult.section, targetOutline);
 
-目标提纲段落：
-${JSON.stringify(targetOutline, null, 2)}
+      if (validationIssues.length === 0) {
+        const normalizedSection = {
+          id: targetOutline.id,
+          heading: targetOutline.heading,
+          body: aiResult.section.body.trim(),
+        };
+        const updatedSections = params.currentSections.map((section) =>
+          section.id === params.targetSectionId ? normalizedSection : section
+        );
 
-当前整篇 sections：
-${JSON.stringify(params.currentSections, null, 2)}
+        return {
+          title: params.title,
+          sections: updatedSections,
+          content: compileSectionsToContent(updatedSections),
+          changeSummary: aiResult.changeSummary,
+        };
+      }
 
-个人规则库：
-${formatRules(params.rules || [])}
+      if (attempt === 0) {
+        repairNotes = validationIssues;
+        continue;
+      }
 
-参考材料：
-${formatReferences(params.references || [])}
+      throw new AppError(
+        502,
+        `段落重写未通过质量校验，请重试或切换模型：${validationIssues.join('；')}`,
+        'SECTION_GENERATION_INVALID'
+      );
+    } catch (error) {
+      if (!(error instanceof AppError)) {
+        throw error;
+      }
 
-请只输出 JSON：
-{
-  "section": { "id": "${targetOutline.id}", "heading": "${targetOutline.heading}", "body": "重写后的正文" },
-  "changeSummary": "本次修改摘要"
-}`;
+      if (error.code !== 'SECTION_GENERATION_INVALID' || attempt === 1) {
+        throw error.code === 'SECTION_GENERATION_INVALID'
+          ? new AppError(502, `${error.message}。请重试或切换模型。`, 'SECTION_GENERATION_INVALID')
+          : error;
+      }
 
-  const fallback = {
-    section: {
-      id: targetOutline.id,
-      heading: targetOutline.heading,
-      body: `${targetOutline.purpose}。${targetOutline.keyPoints.join('；')}`.trim(),
-    },
-    changeSummary: `已围绕“${targetOutline.heading}”重写段落`,
-  };
+      repairNotes = [error.message];
+    }
+  }
 
-  const aiResult = await callStructuredModel(params.provider, prompt, sectionDraftResponseSchema, fallback);
-  const updatedSections = params.currentSections.map((section) => (section.id === params.targetSectionId ? aiResult.section : section));
-
-  return {
-    title: params.title,
-    sections: updatedSections,
-    content: compileSectionsToContent(updatedSections),
-    changeSummary: aiResult.changeSummary,
-  };
+  throw new AppError(502, '段落重写未通过质量校验，请重试或切换模型', 'SECTION_GENERATION_INVALID');
 }
 
 function replaceFirst(text: string, searchValue: string, replaceValue: string) {
@@ -982,7 +1326,10 @@ ${formatRules(params.rules || [])}
       updatedText: params.selectedText,
       changeSummary: '已按要求调整选中片段',
     };
-    const aiResult = await callStructuredModel(params.provider, prompt, reviseSelectionSchema, fallback);
+    const aiResult = await callStructuredModel(params.provider, prompt, reviseSelectionSchema, {
+      fallback,
+      maxTokens: MODEL_TOKEN_BUDGETS.revise,
+    });
     const nextContent = replaceFirst(currentContent, params.selectedText, aiResult.updatedText);
 
     if (!nextContent) {
@@ -1049,7 +1396,10 @@ ${formatReferences(params.references || [])}
       updatedSection: targetSection,
       changeSummary: `已调整“${targetSection.heading}”段落`,
     };
-    const aiResult = await callStructuredModel(params.provider, prompt, reviseSectionSchema, fallback);
+    const aiResult = await callStructuredModel(params.provider, prompt, reviseSectionSchema, {
+      fallback,
+      maxTokens: MODEL_TOKEN_BUDGETS.revise,
+    });
     const updatedSections = params.sections.map((section) => (section.id === targetSection.id ? aiResult.updatedSection : section));
 
     return {
@@ -1090,7 +1440,10 @@ ${formatReferences(params.references || [])}
     sections: params.sections,
     changeSummary: '已按要求调整全文',
   };
-  const aiResult = await callStructuredModel(params.provider, prompt, reviseFullSchema, fallback);
+  const aiResult = await callStructuredModel(params.provider, prompt, reviseFullSchema, {
+    fallback,
+    maxTokens: MODEL_TOKEN_BUDGETS.revise,
+  });
 
   return {
     title: aiResult.title || params.title,
@@ -1211,7 +1564,10 @@ ${formatReferences(params.references || [])}
     attachments: params.attachments,
   });
   const fallback = { checks: deterministicChecks };
-  const aiResult = await callStructuredModel(params.provider, prompt, reviewResponseSchema, fallback);
+  const aiResult = await callStructuredModel(params.provider, prompt, reviewResponseSchema, {
+    fallback,
+    maxTokens: MODEL_TOKEN_BUDGETS.review,
+  });
 
   const mergedChecks = [...deterministicChecks];
   aiResult.checks.forEach((check) => {
