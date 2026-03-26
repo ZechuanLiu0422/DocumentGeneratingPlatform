@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Ready to execute
-stopped_at: Completed 02-02-PLAN.md
-last_updated: "2026-03-26T16:55:21Z"
+stopped_at: Completed 02-04-PLAN.md
+last_updated: "2026-03-26T17:10:36Z"
 progress:
   total_phases: 5
   completed_phases: 1
   total_plans: 8
-  completed_plans: 6
+  completed_plans: 7
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-03-26)
 ## Current Position
 
 Phase: 02 (verification-and-telemetry-baseline) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 
 ## Performance Metrics
 
@@ -62,18 +62,20 @@ Recent decisions affecting current work:
 - [Phase 02]: Serialized the SAFE-01 contract suite with --test-concurrency=1 because the helper-based route mocks need deterministic execution.
 - [Phase 02]: SAFE-02 seeds and auth helpers derive local Supabase URL/keys from `npx supabase status -o env` so proof stays on the local stack instead of `.env.local`.
 - [Phase 02]: Local Supabase auth email login must stay enabled in `supabase/config.toml` because SAFE-02 proves real authenticated anon-client RLS, not service-role shortcuts.
+- [Phase 02]: SAFE-04 extends the existing `lib/api.ts` JSON logging path with structured workflow/export metadata instead of introducing a new observability stack.
+- [Phase 02]: `/api/health` now reports only coarse `status` and `checks`, avoiding provider inventory leakage in routine health probes.
 
 ### Pending Todos
 
-- Phase 2 Wave 1 still needs SAFE-04 telemetry baseline execution before SAFE-03 browser smoke can begin.
+- Phase 2 Wave 2 needs SAFE-03 seeded browser smoke execution to close the verification baseline milestone.
 
 ### Blockers/Concerns
 
 - SAFE-03 depends on the shared Phase 2 seed harness staying stable because it now reuses the same local Supabase fixtures.
-- SAFE-04 should preserve the existing JSON log pattern in `lib/api.ts` instead of introducing a separate observability stack.
+- Browser smoke work still needs app/runtime orchestration around the newly verified local seed and telemetry baselines.
 
 ## Session Continuity
 
 Last session: 2026-03-26T15:52:09.192Z
-Stopped at: Completed 02-02-PLAN.md
+Stopped at: Completed 02-04-PLAN.md
 Resume file: None

@@ -42,8 +42,8 @@ created: 2026-03-26
 | 02-01-02 | 01 | 1 | SAFE-01 | contract + build | `npm run test:phase-02:contracts && npm run build` | ✅ | ✅ green |
 | 02-02-01 | 02 | 1 | SAFE-02 | fixture setup | `npm run test:phase-02:rls:reset && npm run test:phase-02:rls:seed` | ✅ | ✅ green |
 | 02-02-02 | 02 | 1 | SAFE-02 | integration | `npm run test:phase-02:rls:reset && npm run test:phase-02:rls:seed && npm run test:phase-02:rls && npm run check:schema` | ✅ | ✅ green |
-| 02-04-01 | 04 | 1 | SAFE-04 | unit + contract | `node --experimental-strip-types --test tests/phase-02/telemetry/telemetry-contract.test.ts` | ❌ W0 | ⬜ pending |
-| 02-04-02 | 04 | 1 | SAFE-04 | route contract + build | `node --experimental-strip-types --test tests/phase-02/telemetry/telemetry-contract.test.ts tests/phase-02/telemetry/workflow-route-telemetry.test.ts tests/phase-02/telemetry/health-contract.test.ts && npm run build` | ❌ W0 | ⬜ pending |
+| 02-04-01 | 04 | 1 | SAFE-04 | unit + contract | `node --experimental-strip-types --test tests/phase-02/telemetry/telemetry-contract.test.ts` | ✅ | ✅ green |
+| 02-04-02 | 04 | 1 | SAFE-04 | route contract + build | `node --experimental-strip-types --test tests/phase-02/telemetry/telemetry-contract.test.ts tests/phase-02/telemetry/workflow-route-telemetry.test.ts tests/phase-02/telemetry/health-contract.test.ts && npm run build` | ✅ | ✅ green |
 | 02-03-01 | 03 | 2 | SAFE-03 | environment setup | `npm run test:phase-02:rls:reset && npm run test:phase-02:e2e:seed && npm run test:phase-02:e2e:install && npm run build` | ❌ W0 | ⬜ pending |
 | 02-03-02 | 03 | 2 | SAFE-03 | browser smoke | `npm run test:phase-02:rls:reset && npm run test:phase-02:e2e:seed && npm run test:phase-02:e2e:install && npm run build && npm run test:phase-02:e2e` | ❌ W0 | ⬜ pending |
 
