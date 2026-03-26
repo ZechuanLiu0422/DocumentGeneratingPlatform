@@ -1,5 +1,7 @@
 # Lessons
 
+- If a phase plan changes data contracts or workflow behavior, lint-only `<verify>` steps are not enough; add executable behavioral checks that prove the contract works, not just that the files parse.
+- If a roadmap requirement is broader than one route or file, give it its own plan or explicit task coverage instead of assuming nearby hardening work implicitly satisfies it.
 - Next.js 如果报 `Cannot find module './<id>.js'` 且堆栈指向 `.next/server/webpack-runtime.js`，先检查 `webpack-runtime.js` 的 chunk 引用路径是否和 `.next/server/chunks/` 实际布局一致，再决定是否需要隔离旧 `.next` 并重建，不要先怀疑业务页面代码。
 - 如果本地 `next dev` 生成的 `.next/server/webpack-runtime.js` 仍用 `./<id>.js` 加载数字 chunk，而实际文件位于 `.next/server/chunks/<id>.js`，应优先修正 dev 启动流程里的 runtime 路径，不要同时运行 `next build` 和 `next dev` 去共用同一个 `.next` 目录。
 - 如果 runtime 文件最终已经被补丁改成 `chunks/<id>.js`，用户仍在启动早期撞到 `Cannot find module './<id>.js'`，优先怀疑 `next dev` 首次产物生成与首个请求之间的竞态；启动脚本应先隔离旧 `.next`，并尽早、高频修补 runtime，而不是只靠低频轮询。

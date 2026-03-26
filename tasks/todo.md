@@ -1,5 +1,14 @@
 # TODO
 
+- [x] Revise Phase 1 plans to close the plan-checker blockers
+- [x] Add explicit FLOW-02 coverage for authoritative workflow-stage transitions
+- [x] Replace lint-only verification in Phase 1 plans with executable behavioral checks
+- [x] Re-run Phase 1 plan review and confirm the blockers are resolved
+- [x] Create Phase 1 planning directory and phase-planning checklist
+- [x] Generate executable PLAN.md files for Phase 1 workflow-integrity work
+- [x] Verify Phase 1 plans with the GSD plan checker and close any coverage gaps
+- [x] Record Phase 1 planning review notes and commit the resulting planning docs
+
 - [x] Initialize `.planning/PROJECT.md` for the brownfield document-generation platform
 - [x] Create `.planning/config.json` with GSD workflow defaults for this repo
 - [x] Produce `.planning/research/` project research artifacts
@@ -45,6 +54,31 @@
 - [x] 重新验证本地 dev 流程并补充 review 记录
 
 ## Review
+
+- Phase 1 planning completed on 2026-03-26 for [ROADMAP.md](/Users/agent/Desktop/ClaudeCodeTesting/DocuGeneratingPlatform/.planning/ROADMAP.md) phase `Workflow Integrity Guardrails`.
+- Initial planner pass produced 3 plans in 2 waves under [.planning/phases/01-workflow-integrity-guardrails](/Users/agent/Desktop/ClaudeCodeTesting/DocuGeneratingPlatform/.planning/phases/01-workflow-integrity-guardrails), then the checker found 2 blockers:
+- `FLOW-02` coverage was incomplete because authoritative stage-transition routes were not explicitly planned
+- verification relied on `npm run lint` only, which was too weak for workflow-contract changes
+- Revision added `01-04-PLAN.md` to centralize authoritative workflow-stage transitions across intake/planning/outline/draft/review/export routes, and strengthened verification across the plan set with executable behavior checks.
+- Final verified plan set:
+- [01-01-PLAN.md](/Users/agent/Desktop/ClaudeCodeTesting/DocuGeneratingPlatform/.planning/phases/01-workflow-integrity-guardrails/01-01-PLAN.md)
+- [01-02-PLAN.md](/Users/agent/Desktop/ClaudeCodeTesting/DocuGeneratingPlatform/.planning/phases/01-workflow-integrity-guardrails/01-02-PLAN.md)
+- [01-03-PLAN.md](/Users/agent/Desktop/ClaudeCodeTesting/DocuGeneratingPlatform/.planning/phases/01-workflow-integrity-guardrails/01-03-PLAN.md)
+- [01-04-PLAN.md](/Users/agent/Desktop/ClaudeCodeTesting/DocuGeneratingPlatform/.planning/phases/01-workflow-integrity-guardrails/01-04-PLAN.md)
+- Final wave structure:
+- Wave 1: `01-01`, `01-02`, `01-04`
+- Wave 2: `01-03`
+- Checker outcome after revision: 0 blockers, 1 warning. The remaining warning is that `01-04-PLAN.md` spans 10 files and should be executed with extra discipline or split later if execution friction appears.
+- Coverage verification from checker:
+- `FLOW-01` → Plans `01`, `03`
+- `FLOW-02` → Plan `04`
+- `FLOW-03` → Plans `02`, `03`
+- `FLOW-04` → Plan `02`
+- Verification evidence for the planning run:
+- planner output reported 4 executable plan files written for Phase 1
+- checker output reported requirement coverage pass, dependency correctness pass, verification derivation pass, and CLAUDE/AGENTS compliance pass
+- direct filesystem verification confirmed all four `*-PLAN.md` files exist in the phase directory
+- Worktree note: `tasks/lessons.md` had unrelated pre-existing modifications during the planning run and was intentionally left out of the planning-doc commit.
 
 - Brownfield GSD project initialization completed on 2026-03-26 for the existing official-document generation platform.
 - Created and committed [.planning/PROJECT.md](/Users/agent/Desktop/ClaudeCodeTesting/DocuGeneratingPlatform/.planning/PROJECT.md) plus [.planning/config.json](/Users/agent/Desktop/ClaudeCodeTesting/DocuGeneratingPlatform/.planning/config.json) using recommended defaults: `yolo`, `standard` granularity, parallel execution, committed docs, and research/plan-check/verifier enabled.
