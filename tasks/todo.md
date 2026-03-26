@@ -1,5 +1,11 @@
 # TODO
 
+- [x] Create Phase 2 planning directory and planning checklist
+- [x] Research Phase 2 verification and telemetry approaches against the current codebase
+- [x] Generate executable PLAN.md files for Phase 2 verification-and-telemetry work
+- [x] Verify Phase 2 plans with the GSD plan checker and close any coverage gaps
+- [x] Record Phase 2 planning review notes and commit the resulting planning docs
+
 - [x] Execute Phase 01 Plan 04 Task 1 with TDD red-green flow
 - [x] Verify Task 1 workflow-stage ownership checks and commit atomically
 - [x] Execute Phase 01 Plan 04 Task 2 with TDD route adoption flow
@@ -87,6 +93,43 @@
 - [x] 重新验证本地 dev 流程并补充 review 记录
 
 ## Review
+
+- Phase 2 planning completed on 2026-03-26 for [ROADMAP.md](/Users/agent/Desktop/ClaudeCodeTesting/DocuGeneratingPlatform/.planning/ROADMAP.md) phase `Verification and Telemetry Baseline`.
+- Final executable plan set written under [.planning/phases/02-verification-and-telemetry-baseline](/Users/agent/Desktop/ClaudeCodeTesting/DocuGeneratingPlatform/.planning/phases/02-verification-and-telemetry-baseline):
+- [02-01-PLAN.md](/Users/agent/Desktop/ClaudeCodeTesting/DocuGeneratingPlatform/.planning/phases/02-verification-and-telemetry-baseline/02-01-PLAN.md)
+- [02-02-PLAN.md](/Users/agent/Desktop/ClaudeCodeTesting/DocuGeneratingPlatform/.planning/phases/02-verification-and-telemetry-baseline/02-02-PLAN.md)
+- [02-03-PLAN.md](/Users/agent/Desktop/ClaudeCodeTesting/DocuGeneratingPlatform/.planning/phases/02-verification-and-telemetry-baseline/02-03-PLAN.md)
+- [02-04-PLAN.md](/Users/agent/Desktop/ClaudeCodeTesting/DocuGeneratingPlatform/.planning/phases/02-verification-and-telemetry-baseline/02-04-PLAN.md)
+- [02-VALIDATION.md](/Users/agent/Desktop/ClaudeCodeTesting/DocuGeneratingPlatform/.planning/phases/02-verification-and-telemetry-baseline/02-VALIDATION.md)
+- Wave layout chosen to minimize brownfield risk:
+- Wave 1: `02-01` node:test contracts, `02-02` real Supabase auth/RLS harness, `02-04` structured telemetry + health hardening
+- Wave 2: `02-03` seeded Playwright smoke, depending on `02-02` for the shared local Supabase seed/auth fixture path
+- Requirement coverage:
+- `SAFE-01` → `02-01`
+- `SAFE-02` → `02-02`
+- `SAFE-03` → `02-03`
+- `SAFE-04` → `02-04`
+- Validation evidence:
+- `node "$HOME/.codex/get-shit-done/bin/gsd-tools.cjs" frontmatter validate .planning/phases/02-verification-and-telemetry-baseline/02-01-PLAN.md --schema plan`
+- `node "$HOME/.codex/get-shit-done/bin/gsd-tools.cjs" verify plan-structure .planning/phases/02-verification-and-telemetry-baseline/02-01-PLAN.md`
+- `node "$HOME/.codex/get-shit-done/bin/gsd-tools.cjs" frontmatter validate .planning/phases/02-verification-and-telemetry-baseline/02-02-PLAN.md --schema plan`
+- `node "$HOME/.codex/get-shit-done/bin/gsd-tools.cjs" verify plan-structure .planning/phases/02-verification-and-telemetry-baseline/02-02-PLAN.md`
+- `node "$HOME/.codex/get-shit-done/bin/gsd-tools.cjs" frontmatter validate .planning/phases/02-verification-and-telemetry-baseline/02-03-PLAN.md --schema plan`
+- `node "$HOME/.codex/get-shit-done/bin/gsd-tools.cjs" verify plan-structure .planning/phases/02-verification-and-telemetry-baseline/02-03-PLAN.md`
+- `node "$HOME/.codex/get-shit-done/bin/gsd-tools.cjs" frontmatter validate .planning/phases/02-verification-and-telemetry-baseline/02-04-PLAN.md --schema plan`
+- `node "$HOME/.codex/get-shit-done/bin/gsd-tools.cjs" verify plan-structure .planning/phases/02-verification-and-telemetry-baseline/02-04-PLAN.md`
+- `test -f .planning/phases/02-verification-and-telemetry-baseline/02-VALIDATION.md && echo VALIDATION_CREATED=true || echo VALIDATION_CREATED=false`
+- `gsd-plan-checker` re-review verdict: `PASS`
+- Revision loop closed the initial checker blockers by:
+- adding CI wiring plus a harness-smoke verify path to `02-01`
+- switching `02-02` and `02-03` verification to repo-local npm scripts instead of a bare global Supabase CLI assumption
+- adding explicit Playwright browser install/setup to `02-03`
+- adding route-level telemetry adoption tests plus the approved Nyquist contract to `02-04` / `02-VALIDATION`
+- Research constraints preserved in the plan set:
+- `node:test` retained for SAFE-01
+- SAFE-02 explicitly requires real local Supabase plus authenticated anon clients
+- SAFE-03 is seeded and provider-free in CI
+- SAFE-04 extends `lib/api.ts` JSON logging instead of adding a new observability system
 
 - Phase 1 execution completed on 2026-03-26 for [ROADMAP.md](/Users/agent/Desktop/ClaudeCodeTesting/DocuGeneratingPlatform/.planning/ROADMAP.md) phase `Workflow Integrity Guardrails`.
 - Completed plan stack and commit trail:
