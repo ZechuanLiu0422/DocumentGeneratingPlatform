@@ -60,7 +60,7 @@ completed: 2026-03-26
 Each task was committed atomically:
 
 1. **Task 1: Centralize the authoritative workflow-stage map** - `1928bb0` (feat)
-2. **Task 2: Adopt authoritative stage transitions across all stage-writing routes** - pending commit in current execution session
+2. **Task 2: Adopt authoritative stage transitions across all stage-writing routes** - `f47b91b` (feat)
 
 ## Files Created/Modified
 

@@ -245,7 +245,7 @@ function GeneratePageContent() {
   const [rules, setRules] = useState<WritingRule[]>([]);
   const [referenceAssets, setReferenceAssets] = useState<ReferenceAsset[]>([]);
   const [currentDraftId, setCurrentDraftId] = useState<string | null>(null);
-  const [docType, setDocType] = useState('');
+  const [docType, setDocType] = useState<Draft['doc_type'] | ''>('');
   const [workflowStage, setWorkflowStage] = useState<WorkflowStage>('intake');
   const [currentStep, setCurrentStep] = useState<WorkflowStage>('intake');
   const [formData, setFormData] = useState({
@@ -471,7 +471,7 @@ function GeneratePageContent() {
     setActiveReferenceIds([]);
   };
 
-  const handleDocTypeChange = (value: string) => {
+  const handleDocTypeChange = (value: Draft['doc_type'] | '') => {
     setDocType(value);
     resetWorkflow();
   };
@@ -1195,7 +1195,11 @@ function GeneratePageContent() {
               <div className="mt-4 space-y-4">
                 <div>
                   <label className="mb-2 block text-sm font-medium">文种</label>
-                  <select value={docType} onChange={(event) => handleDocTypeChange(event.target.value)} className="w-full rounded-lg border px-3 py-2">
+                  <select
+                    value={docType}
+                    onChange={(event) => handleDocTypeChange(event.target.value as Draft['doc_type'] | '')}
+                    className="w-full rounded-lg border px-3 py-2"
+                  >
                     <option value="">请选择文种</option>
                     {docTypes.map((type) => (
                       <option key={type.id} value={type.id}>

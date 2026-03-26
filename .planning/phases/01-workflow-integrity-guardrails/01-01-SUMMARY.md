@@ -59,7 +59,7 @@ completed: 2026-03-26
 Each task was committed atomically:
 
 1. **Task 1: Split editable draft input from server-owned workflow state** - `21a9921` (test), `ed761a6` (feat)
-2. **Task 2: Sanitize `/api/drafts` writes and return authoritative saved drafts** - pending commit in current execution session
+2. **Task 2: Sanitize `/api/drafts` writes and return authoritative saved drafts** - `facc21b` (feat)
 
 ## Files Created/Modified
 

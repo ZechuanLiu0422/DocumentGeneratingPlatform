@@ -1,5 +1,4 @@
-import { type z } from 'zod';
-import { workflowStageSchema } from './validation.ts';
+type WorkflowStage = 'intake' | 'planning' | 'outline' | 'draft' | 'review' | 'done';
 
 const AUTHORITATIVE_WORKFLOW_STAGE_BY_ACTION = {
   intake_in_progress: 'intake',
@@ -11,7 +10,7 @@ const AUTHORITATIVE_WORKFLOW_STAGE_BY_ACTION = {
   review_applied: 'review',
   revision_applied: 'review',
   export_completed: 'done',
-} as const satisfies Record<string, z.infer<typeof workflowStageSchema>>;
+} as const satisfies Record<string, WorkflowStage>;
 
 export type AuthoritativeWorkflowAction = keyof typeof AUTHORITATIVE_WORKFLOW_STAGE_BY_ACTION;
 export type AuthoritativeWorkflowStage = (typeof AUTHORITATIVE_WORKFLOW_STAGE_BY_ACTION)[AuthoritativeWorkflowAction];

@@ -56,7 +56,7 @@ completed: 2026-03-26
 Each task was committed atomically:
 
 1. **Task 1: Extract and test the editable save-payload and hydration contract** - `438360f` (feat)
-2. **Task 2: Reuse authoritative hydration for version restore and resume flows** - pending commit in current execution session
+2. **Task 2: Reuse authoritative hydration for version restore and resume flows** - `d0d8f7f` (feat)
 
 ## Files Created/Modified
 

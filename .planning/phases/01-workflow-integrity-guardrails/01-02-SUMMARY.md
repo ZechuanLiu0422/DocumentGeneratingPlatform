@@ -55,7 +55,7 @@ completed: 2026-03-26
 Each task was committed atomically:
 
 1. **Task 1: Extract and test the authoritative restore-merge contract** - `287e3cf` (feat)
-2. **Task 2: Return restored draft state from the version restore route** - pending commit in current execution session
+2. **Task 2: Return restored draft state from the version restore route** - `90a654b` (feat)
 
 ## Files Created/Modified
 

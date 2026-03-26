@@ -7,10 +7,10 @@
 
 ### Workflow Integrity
 
-- [ ] **FLOW-01**: User can save editable draft inputs without overwriting server-owned workflow state, generated artifacts, or version counters
-- [ ] **FLOW-02**: User can move through intake, planning, outline, drafting, review, and export only through authoritative server-side workflow transitions
-- [ ] **FLOW-03**: User can reopen an in-progress draft and resume from the last confirmed workflow stage without stage corruption
-- [ ] **FLOW-04**: User can restore a previous version and keep the active draft state, workflow metadata, and version count consistent
+- [x] **FLOW-01**: User can save editable draft inputs without overwriting server-owned workflow state, generated artifacts, or version counters
+- [x] **FLOW-02**: User can move through intake, planning, outline, drafting, review, and export only through authoritative server-side workflow transitions
+- [x] **FLOW-03**: User can reopen an in-progress draft and resume from the last confirmed workflow stage without stage corruption
+- [x] **FLOW-04**: User can restore a previous version and keep the active draft state, workflow metadata, and version count consistent
 
 ### Verification and Safety
 
@@ -71,10 +71,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| FLOW-01 | Phase 1 | Pending |
-| FLOW-02 | Phase 1 | Pending |
-| FLOW-03 | Phase 1 | Pending |
-| FLOW-04 | Phase 1 | Pending |
+| FLOW-01 | Phase 1 | Complete |
+| FLOW-02 | Phase 1 | Complete |
+| FLOW-03 | Phase 1 | Complete |
+| FLOW-04 | Phase 1 | Complete |
 | SAFE-01 | Phase 2 | Pending |
 | SAFE-02 | Phase 2 | Pending |
 | SAFE-03 | Phase 2 | Pending |
@@ -98,4 +98,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-03-26*
-*Last updated: 2026-03-26 after roadmap creation*
+*Last updated: 2026-03-26 after Phase 1 execution*

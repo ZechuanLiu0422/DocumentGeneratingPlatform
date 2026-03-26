@@ -10,7 +10,7 @@ This brownfield roadmap hardens the existing drafting platform in the order the 
 - Integer phases (1, 2, 3): Planned milestone work
 - Decimal phases (2.1, 2.2): Urgent insertions after planning
 
-- [ ] **Phase 1: Workflow Integrity Guardrails** - Make server-owned draft state and stage transitions authoritative.
+- [x] **Phase 1: Workflow Integrity Guardrails** - Make server-owned draft state and stage transitions authoritative.
 - [ ] **Phase 2: Verification and Telemetry Baseline** - Add automated safety rails and observability around workflow behavior.
 - [ ] **Phase 3: Grounded Drafting and Review Trust** - Make generated output reviewable, provenance-backed, and safer to accept.
 - [ ] **Phase 4: Durable Execution and Export Hardening** - Move fragile long-running work into resumable operational paths.
@@ -27,7 +27,7 @@ This brownfield roadmap hardens the existing drafting platform in the order the 
   2. User can advance through intake, planning, outline, drafting, review, and export only by using supported workflow actions, not by posting forged client state.
   3. User can reopen an in-progress draft and resume from the last confirmed workflow stage with the expected content and stage status intact.
   4. User can restore a previous version and continue editing with consistent active content, workflow metadata, and version numbering.
-**Plans**: TBD
+**Plans**: 4 complete (`01-01` draft save hardening, `01-02` restore snapshot hardening, `01-03` generate workspace hydration alignment, `01-04` authoritative stage transition centralization)
 
 ### Phase 2: Verification and Telemetry Baseline
 **Goal**: Maintainers and operators can prove workflow correctness, auth isolation, and runtime health before shipping refactors.
@@ -79,7 +79,7 @@ This brownfield roadmap hardens the existing drafting platform in the order the 
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Workflow Integrity Guardrails | 0/TBD | Not started | - |
+| 1. Workflow Integrity Guardrails | 4/4 | Complete | 2026-03-26 |
 | 2. Verification and Telemetry Baseline | 0/TBD | Not started | - |
 | 3. Grounded Drafting and Review Trust | 0/TBD | Not started | - |
 | 4. Durable Execution and Export Hardening | 0/TBD | Not started | - |
