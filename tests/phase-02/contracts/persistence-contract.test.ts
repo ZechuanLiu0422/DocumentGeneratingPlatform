@@ -1,15 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  compileSectionsToContent,
-  listVersionsForDraft,
-  saveDraftState,
-} from '../../../lib/collaborative-store.ts';
-import {
   buildDraftFixture,
   buildSparseDraftFixture,
   buildSparseVersionFixture,
+  buildVersionFixture,
 } from './shared-fixtures.ts';
+import { importProjectModule } from './route-contract-helpers.ts';
 
 function createDraftInsertClient(row: Record<string, unknown>) {
   let insertedPayload: Record<string, unknown> | null = null;
@@ -71,7 +68,8 @@ function createVersionListClient(rows: Array<Record<string, unknown>>) {
   };
 }
 
-test('compileSectionsToContent joins normalized section text without empty fragments', () => {
+test('compileSectionsToContent joins normalized section text without empty fragments', async (t) => {
+  const { compileSectionsToContent } = await importProjectModule(t, '../../../lib/collaborative-store.ts');
   const content = compileSectionsToContent([
     {
       id: 'sec-1',
@@ -88,7 +86,8 @@ test('compileSectionsToContent joins normalized section text without empty fragm
   assert.equal(content, '一、工作目标\n请按要求准备材料。\n\n第二段正文');
 });
 
-test('saveDraftState shapes insert payloads and normalizes sparse stored draft rows', async () => {
+test('saveDraftState shapes insert payloads and normalizes sparse stored draft rows', async (t) => {
+  const { saveDraftState } = await importProjectModule(t, '../../../lib/collaborative-store.ts');
   const sparseDraft = buildSparseDraftFixture();
   const insertHarness = createDraftInsertClient(sparseDraft);
 
@@ -122,7 +121,10 @@ test('saveDraftState shapes insert payloads and normalizes sparse stored draft r
     },
   });
 
-  assert.deepEqual(insertHarness.getInsertedPayload(), {
+  const insertedPayload = insertHarness.getInsertedPayload();
+  assert.ok(insertedPayload);
+  assert.equal(typeof insertedPayload.updated_at, 'string');
+  assert.deepEqual({ ...insertedPayload, updated_at: '<timestamp>' }, {
     user_id: '11111111-1111-4111-8111-111111111111',
     doc_type: 'notice',
     provider: 'claude',
@@ -145,7 +147,7 @@ test('saveDraftState shapes insert payloads and normalizes sparse stored draft r
     version_count: 0,
     generated_title: null,
     generated_content: null,
-    updated_at: sparseDraft.updated_at,
+    updated_at: '<timestamp>',
   });
 
   assert.deepEqual(saved.attachments, []);
@@ -157,14 +159,15 @@ test('saveDraftState shapes insert payloads and normalizes sparse stored draft r
   assert.equal(saved.generated_content, null);
 });
 
-test('listVersionsForDraft normalizes sparse version rows into stable arrays', async () => {
+test('listVersionsForDraft normalizes sparse version rows into stable arrays', async (t) => {
+  const { listVersionsForDraft } = await importProjectModule(t, '../../../lib/collaborative-store.ts');
   const versions = await listVersionsForDraft(
-    createVersionListClient([buildSparseVersionFixture(), buildDraftFixture()]) as never,
+    createVersionListClient([buildSparseVersionFixture(), buildVersionFixture()]) as never,
     '11111111-1111-4111-8111-111111111111',
     '22222222-2222-4222-8222-222222222222'
   );
 
   assert.equal(versions.length, 2);
   assert.deepEqual(versions[0].sections, []);
-  assert.deepEqual(versions[1].sections, buildDraftFixture().sections);
+  assert.deepEqual(versions[1].sections, buildVersionFixture().sections);
 });

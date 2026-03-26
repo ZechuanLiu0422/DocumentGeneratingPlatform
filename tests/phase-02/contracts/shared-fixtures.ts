@@ -3,7 +3,7 @@ export function buildSessionReference() {
     name: '办公室发文规范',
     docType: 'notice' as const,
     fileName: 'notice-guide.docx',
-    fileType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    fileType: 'application/docx',
     content: '发文应先说明背景，再明确任务与时间要求。',
     analysis: {
       tone: '正式、克制',
@@ -198,6 +198,49 @@ export function buildVersionFixture() {
         body: '请按要求准备材料。',
       },
     ],
+    change_summary: '已生成正文',
+    created_at: '2026-03-26T00:00:00.000Z',
+  };
+}
+
+export function buildSparseDraftFixture() {
+  return {
+    id: '22222222-2222-4222-8222-222222222222',
+    user_id: '11111111-1111-4111-8111-111111111111',
+    doc_type: 'notice' as const,
+    title: '关于开展专项检查的通知',
+    recipient: '各相关单位',
+    content: '请按要求准备材料。',
+    issuer: '办公室',
+    date: '2026-03-26',
+    provider: 'claude' as const,
+    contact_name: '张三',
+    contact_phone: '12345678',
+    attachments: null,
+    workflow_stage: 'intake' as const,
+    collected_facts: null,
+    missing_fields: null,
+    planning: null,
+    outline: null,
+    sections: null,
+    active_rule_ids: null,
+    active_reference_ids: null,
+    version_count: null,
+    generated_title: '',
+    generated_content: '',
+    updated_at: '2026-03-26T00:00:00.000Z',
+  };
+}
+
+export function buildSparseVersionFixture() {
+  return {
+    id: '55555555-5555-4555-8555-555555555555',
+    draft_id: '22222222-2222-4222-8222-222222222222',
+    user_id: '11111111-1111-4111-8111-111111111111',
+    stage: 'draft_generated' as const,
+    title: '关于开展专项检查的通知',
+    content: '一、工作目标\n请按要求准备材料。',
+    sections: null,
     change_summary: '已生成正文',
     created_at: '2026-03-26T00:00:00.000Z',
   };

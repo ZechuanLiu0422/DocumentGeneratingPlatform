@@ -1,6 +1,5 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { AppError } from '../../../lib/api.ts';
 import {
   buildDraftFixture,
   buildDraftRequestBody,
@@ -11,21 +10,21 @@ import {
   buildReviewRequestBody,
   buildVersionFixture,
 } from './shared-fixtures.ts';
-import { createJsonRequest, withRouteModuleMocks } from './route-contract-helpers.ts';
-
-const authFailure = {
-  '@/lib/auth': {
-    requireRouteUser: async () => {
-      throw new AppError(401, '请先登录', 'UNAUTHORIZED');
-    },
-  },
-};
+import { createJsonRequest, importProjectModule, withRouteModuleMocks } from './route-contract-helpers.ts';
 
 function createAuthSuccess() {
   return {
     '@/lib/auth': {
       requireRouteUser: async () => ({
-        supabase: { kind: 'stub' },
+        supabase: {
+          from() {
+            return {
+              async insert() {
+                return { error: null };
+              },
+            };
+          },
+        },
         user: { id: '11111111-1111-4111-8111-111111111111' },
       }),
     },
@@ -34,6 +33,49 @@ function createAuthSuccess() {
 
 function createCommonBoundaryStubs() {
   return {
+    '@/lib/collaborative-route-helpers': {
+      loadRuleAndReferenceContext: async () => ({ rules: [], references: [] }),
+      resolveBaseDraftFields: () => ({ title: '关于开展专项检查的通知' }),
+    },
+    '@/lib/collaborative-store': {
+      getDraftById: async () => buildDraftFixture(),
+      saveDraftState: async () => buildDraftFixture(),
+      createVersionSnapshot: async () => undefined,
+    },
+    '@/lib/document-generator': {
+      generateDocumentBuffer: async () => Buffer.from('docx-binary'),
+    },
+    '@/lib/official-document-workflow': {
+      runIntakeWorkflow: async () => ({
+        readiness: 'ready',
+        collectedFacts: {},
+        missingFields: [],
+        nextQuestions: [],
+        suggestedTitle: '关于开展专项检查的通知',
+      }),
+      generateOutlinePlanWorkflow: async () => ({
+        options: buildDraftFixture().planning?.options || [],
+        planVersion: 'plan-v1',
+      }),
+      hydratePlanningSectionsForOutline: (sections: unknown) => sections,
+      generateOutlineWorkflow: async () => ({
+        titleOptions: buildDraftFixture().outline?.titleOptions || [],
+        outlineSections: buildDraftFixture().outline?.sections || [],
+        risks: buildDraftFixture().outline?.risks || [],
+        outlineVersion: 'outline-v1',
+      }),
+      generateDraftWorkflow: async () => ({
+        title: buildDraftFixture().generated_title,
+        content: buildDraftFixture().generated_content,
+        sections: buildDraftFixture().sections,
+      }),
+      regenerateSectionWorkflow: async () => ({
+        title: buildDraftFixture().generated_title,
+        content: buildDraftFixture().generated_content,
+        sections: buildDraftFixture().sections,
+      }),
+      reviewWorkflow: async () => [],
+    },
     '@/lib/quota': {
       enforceDailyQuota: async () => undefined,
       recordUsageEvent: async () => undefined,
@@ -49,6 +91,16 @@ function createCommonBoundaryStubs() {
 }
 
 test('workflow routes fail fast with normalized unauthorized responses', async (t) => {
+  const api = await importProjectModule(t, '../../../lib/api.ts');
+  const { AppError } = api;
+  const authFailure = {
+    '@/lib/auth': {
+      requireRouteUser: async () => {
+        throw new AppError(401, '请先登录', 'UNAUTHORIZED');
+      },
+    },
+  };
+
   const cases = [
     ['../../../app/api/ai/intake/route.ts', createJsonRequest('/api/ai/intake', buildIntakeRequestBody())],
     ['../../../app/api/ai/outline-plan/route.ts', createJsonRequest('/api/ai/outline-plan', buildOutlinePlanRequestBody())],
@@ -60,6 +112,7 @@ test('workflow routes fail fast with normalized unauthorized responses', async (
 
   for (const [routePath, request] of cases) {
     const module = await withRouteModuleMocks(t, routePath, {
+      '@/lib/api': api,
       ...authFailure,
       ...createCommonBoundaryStubs(),
     });
@@ -74,7 +127,9 @@ test('workflow routes fail fast with normalized unauthorized responses', async (
 });
 
 test('workflow routes normalize validation failures through shared route helpers', async (t) => {
+  const api = await importProjectModule(t, '../../../lib/api.ts');
   const intakeModule = await withRouteModuleMocks(t, '../../../app/api/ai/intake/route.ts', {
+    '@/lib/api': api,
     ...createAuthSuccess(),
     ...createCommonBoundaryStubs(),
     '@/lib/collaborative-route-helpers': {
@@ -110,10 +165,12 @@ test('workflow routes normalize validation failures through shared route helpers
 });
 
 test('workflow route contracts expose the expected minimum success payloads', async (t) => {
+  const api = await importProjectModule(t, '../../../lib/api.ts');
   const draftFixture = buildDraftFixture();
   const versionFixture = buildVersionFixture();
 
   const intakeModule = await withRouteModuleMocks(t, '../../../app/api/ai/intake/route.ts', {
+    '@/lib/api': api,
     ...createAuthSuccess(),
     ...createCommonBoundaryStubs(),
     '@/lib/collaborative-route-helpers': {
@@ -140,6 +197,7 @@ test('workflow route contracts expose the expected minimum success payloads', as
   assert.equal(intakePayload.workflowStage, 'planning');
 
   const outlinePlanModule = await withRouteModuleMocks(t, '../../../app/api/ai/outline-plan/route.ts', {
+    '@/lib/api': api,
     ...createAuthSuccess(),
     ...createCommonBoundaryStubs(),
     '@/lib/collaborative-route-helpers': {
@@ -164,6 +222,7 @@ test('workflow route contracts expose the expected minimum success payloads', as
   assert.equal(outlinePlanPayload.options.length, 1);
 
   const outlineModule = await withRouteModuleMocks(t, '../../../app/api/ai/outline/route.ts', {
+    '@/lib/api': api,
     ...createAuthSuccess(),
     ...createCommonBoundaryStubs(),
     '@/lib/collaborative-route-helpers': {
@@ -189,6 +248,7 @@ test('workflow route contracts expose the expected minimum success payloads', as
   assert.equal(outlinePayload.titleOptions[0], draftFixture.title);
 
   const draftModule = await withRouteModuleMocks(t, '../../../app/api/ai/draft/route.ts', {
+    '@/lib/api': api,
     ...createAuthSuccess(),
     ...createCommonBoundaryStubs(),
     '@/lib/collaborative-route-helpers': {
@@ -218,6 +278,7 @@ test('workflow route contracts expose the expected minimum success payloads', as
   assert.equal(draftPayload.sections.length, 1);
 
   const reviewModule = await withRouteModuleMocks(t, '../../../app/api/ai/review/route.ts', {
+    '@/lib/api': api,
     ...createAuthSuccess(),
     ...createCommonBoundaryStubs(),
     '@/lib/collaborative-route-helpers': {
@@ -245,6 +306,7 @@ test('workflow route contracts expose the expected minimum success payloads', as
   assert.equal(reviewPayload.checks[0].code, 'STRUCTURE');
 
   const generateModule = await withRouteModuleMocks(t, '../../../app/api/generate/route.ts', {
+    '@/lib/api': api,
     ...createAuthSuccess(),
     ...createCommonBoundaryStubs(),
     '@/lib/document-generator': {

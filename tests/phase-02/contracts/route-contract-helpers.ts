@@ -27,10 +27,11 @@ function getRouteMockStore() {
 
 function createMockModuleUrl(key: string, namedExports: ModuleExports) {
   const store = getRouteMockStore();
-  store[key] = namedExports;
+  const cacheKey = `${key}:${Date.now()}:${Math.random().toString(16).slice(2)}`;
+  store[cacheKey] = namedExports;
 
   const exportLines = Object.keys(namedExports)
-    .map((name) => `export const ${name} = globalThis[Symbol.for('phase-02.route-mocks')][${JSON.stringify(key)}][${JSON.stringify(name)}];`)
+    .map((name) => `export const ${name} = globalThis[Symbol.for('phase-02.route-mocks')][${JSON.stringify(cacheKey)}][${JSON.stringify(name)}];`)
     .join('\n');
 
   return `data:text/javascript;base64,${Buffer.from(exportLines).toString('base64')}`;
@@ -69,19 +70,24 @@ function rewriteImportSpecifiers(
       return `from '${tempModuleCache.get(specifier)}'`;
     }
 
+    if (specifier.startsWith('@/')) {
+      const modulePath = path.join(projectRoot, `${specifier.slice(2)}.ts`);
+      return `from '${pathToFileURL(modulePath).href}'`;
+    }
+
     return `from '${specifier}'`;
   });
 }
 
-function buildRouteImportUrl(relativeRoutePath: string, overrides: Record<string, ModuleExports>) {
-  const routeUrl = new URL(relativeRoutePath, import.meta.url);
-  const source = readFileSync(fileURLToPath(routeUrl), 'utf8');
+function buildProjectImportUrl(relativeModulePath: string, overrides: Record<string, ModuleExports>) {
+  const moduleUrl = new URL(relativeModulePath, import.meta.url);
+  const source = readFileSync(fileURLToPath(moduleUrl), 'utf8');
   const tempRoot = path.join(projectRoot, '.tmp');
   mkdirSync(tempRoot, { recursive: true });
   const tempDir = mkdtempSync(path.join(tempRoot, 'phase-02-route-'));
   const tempModuleCache = new Map<string, string>();
   const rewrittenSource = rewriteImportSpecifiers(source, overrides, tempDir, tempModuleCache);
-  const tempFile = path.join(tempDir, `${path.basename(fileURLToPath(routeUrl), '.ts')}.ts`);
+  const tempFile = path.join(tempDir, `${path.basename(fileURLToPath(moduleUrl), '.ts')}.ts`);
   writeFileSync(tempFile, rewrittenSource, 'utf8');
 
   return {
@@ -113,7 +119,25 @@ export async function withRouteModuleMocks(
   relativeRoutePath: string,
   overrides: Record<string, ModuleExports> = {}
 ) {
-  const { importUrl, cleanup } = buildRouteImportUrl(relativeRoutePath, overrides);
+  const { importUrl, cleanup } = buildProjectImportUrl(relativeRoutePath, overrides);
+
+  t.after(() => {
+    const store = getRouteMockStore();
+    for (const key of Object.keys(overrides)) {
+      delete store[key];
+    }
+    cleanup();
+  });
+
+  return import(`${importUrl}?phase02=${Date.now()}-${Math.random().toString(16).slice(2)}`);
+}
+
+export async function importProjectModule(
+  t: TestContext,
+  relativeModulePath: string,
+  overrides: Record<string, ModuleExports> = {}
+) {
+  const { importUrl, cleanup } = buildProjectImportUrl(relativeModulePath, overrides);
 
   t.after(() => {
     const store = getRouteMockStore();
