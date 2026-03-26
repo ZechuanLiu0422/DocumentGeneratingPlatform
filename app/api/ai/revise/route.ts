@@ -7,6 +7,7 @@ import { reviseWorkflow } from '@/lib/official-document-workflow';
 import { enforceDailyQuota, recordUsageEvent } from '@/lib/quota';
 import { enforceRateLimit } from '@/lib/ratelimit';
 import { reviseRequestSchema } from '@/lib/validation';
+import { getAuthoritativeWorkflowStage } from '@/lib/workflow-stage';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -49,6 +50,7 @@ export async function POST(request: NextRequest) {
     });
 
     const nextTitle = result.title || draft.generated_title || draft.title || '';
+    const workflowStage = getAuthoritativeWorkflowStage('revision_applied');
     await saveDraftState(supabase, {
       userId: user.id,
       draftId: draft.id,
@@ -65,7 +67,7 @@ export async function POST(request: NextRequest) {
         attachments: draft.attachments,
       },
       workflow: {
-        workflow_stage: 'review',
+        workflow_stage: workflowStage,
         collected_facts: draft.collected_facts,
         missing_fields: draft.missing_fields,
         planning: draft.planning,

@@ -7,6 +7,7 @@ import { generateOutlineWorkflow, hydratePlanningSectionsForOutline } from '@/li
 import { enforceDailyQuota, recordUsageEvent } from '@/lib/quota';
 import { enforceRateLimit } from '@/lib/ratelimit';
 import { draftPlanningSectionSchema, outlineRequestSchema } from '@/lib/validation';
+import { getAuthoritativeWorkflowStage } from '@/lib/workflow-stage';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -82,6 +83,7 @@ export async function POST(request: NextRequest) {
       rules,
       references,
     });
+    const workflowStage = getAuthoritativeWorkflowStage('outline_generated');
 
     await saveDraftState(supabase, {
       userId: user.id,
@@ -99,7 +101,7 @@ export async function POST(request: NextRequest) {
         attachments: draft.attachments,
       },
       workflow: {
-        workflow_stage: 'outline',
+        workflow_stage: workflowStage,
         collected_facts: draft.collected_facts,
         missing_fields: draft.missing_fields,
         planning: draft.planning

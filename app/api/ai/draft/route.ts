@@ -7,6 +7,7 @@ import { generateDraftWorkflow, regenerateSectionWorkflow } from '@/lib/official
 import { enforceDailyQuota, recordUsageEvent } from '@/lib/quota';
 import { enforceRateLimit } from '@/lib/ratelimit';
 import { draftRequestSchema } from '@/lib/validation';
+import { getAuthoritativeWorkflowStage } from '@/lib/workflow-stage';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -57,8 +58,9 @@ export async function POST(request: NextRequest) {
             outlineSections,
             rules,
             references,
-            attachments: draft.attachments,
-          });
+          attachments: draft.attachments,
+        });
+    const workflowStage = getAuthoritativeWorkflowStage('draft_generated');
 
     await saveDraftState(supabase, {
       userId: user.id,
@@ -76,7 +78,7 @@ export async function POST(request: NextRequest) {
         attachments: draft.attachments,
       },
       workflow: {
-        workflow_stage: 'review',
+        workflow_stage: workflowStage,
         collected_facts: draft.collected_facts,
         missing_fields: draft.missing_fields,
         planning: draft.planning,

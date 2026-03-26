@@ -2,9 +2,9 @@
 
 - [x] Execute Phase 01 Plan 04 Task 1 with TDD red-green flow
 - [x] Verify Task 1 workflow-stage ownership checks and commit atomically
-- [ ] Execute Phase 01 Plan 04 Task 2 with TDD route adoption flow
-- [ ] Verify Task 2 workflow-stage ownership checks plus lint and commit atomically
-- [ ] Create Phase 01 Plan 04 summary and update planning state artifacts
+- [x] Execute Phase 01 Plan 04 Task 2 with TDD route adoption flow
+- [x] Verify Task 2 workflow-stage ownership checks plus lint and commit atomically
+- [x] Create Phase 01 Plan 04 summary and update planning state artifacts
 - [ ] Record Phase 01 Plan 04 execution review notes
 
 - [ ] Execute Phase 01 Plan 02 Task 1 with TDD red-green flow

@@ -7,6 +7,7 @@ import { runIntakeWorkflow } from '@/lib/official-document-workflow';
 import { enforceDailyQuota, recordUsageEvent } from '@/lib/quota';
 import { enforceRateLimit } from '@/lib/ratelimit';
 import { intakeSchema } from '@/lib/validation';
+import { getAuthoritativeWorkflowStage, getIntakeWorkflowAction } from '@/lib/workflow-stage';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -45,6 +46,7 @@ export async function POST(request: NextRequest) {
     });
 
     const baseFields = resolveBaseDraftFields(existingDraft, body.answers, result.suggestedTitle);
+    const workflowStage = getAuthoritativeWorkflowStage(getIntakeWorkflowAction(result.readiness));
     const draft = await saveDraftState(supabase, {
       userId: user.id,
       draftId: body.draftId,
@@ -52,7 +54,7 @@ export async function POST(request: NextRequest) {
       provider: body.provider,
       baseFields,
       workflow: {
-        workflow_stage: result.readiness === 'ready' ? 'planning' : 'intake',
+        workflow_stage: workflowStage,
         collected_facts: result.collectedFacts,
         missing_fields: result.missingFields,
         planning: existingDraft?.planning || null,

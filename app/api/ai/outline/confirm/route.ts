@@ -3,6 +3,7 @@ import { createRequestContext, handleRouteError, ok } from '@/lib/api';
 import { requireRouteUser } from '@/lib/auth';
 import { createVersionSnapshot, getDraftById, saveDraftState } from '@/lib/collaborative-store';
 import { outlineConfirmSchema } from '@/lib/validation';
+import { getAuthoritativeWorkflowStage } from '@/lib/workflow-stage';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -15,6 +16,7 @@ export async function POST(request: NextRequest) {
     context.userId = user.id;
     const body = outlineConfirmSchema.parse(await request.json());
     const draft = await getDraftById(supabase, user.id, body.draftId);
+    const workflowStage = getAuthoritativeWorkflowStage('outline_confirmed');
 
     await saveDraftState(supabase, {
       userId: user.id,
@@ -32,7 +34,7 @@ export async function POST(request: NextRequest) {
         attachments: draft.attachments,
       },
       workflow: {
-        workflow_stage: 'draft',
+        workflow_stage: workflowStage,
         collected_facts: draft.collected_facts,
         missing_fields: draft.missing_fields,
         planning: draft.planning,

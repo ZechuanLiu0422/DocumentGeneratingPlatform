@@ -6,6 +6,7 @@ import { createVersionSnapshot, getDraftById, saveDraftState } from '@/lib/colla
 import { enforceDailyQuota, recordUsageEvent } from '@/lib/quota';
 import { enforceRateLimit } from '@/lib/ratelimit';
 import { generateSchema } from '@/lib/validation';
+import { getAuthoritativeWorkflowStage } from '@/lib/workflow-stage';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -65,6 +66,7 @@ export async function POST(request: NextRequest) {
 
     if (body.draftId) {
       const draft = await getDraftById(supabase, user.id, body.draftId);
+      const workflowStage = getAuthoritativeWorkflowStage('export_completed');
       await saveDraftState(supabase, {
         userId: user.id,
         draftId: draft.id,
@@ -81,7 +83,7 @@ export async function POST(request: NextRequest) {
           attachments: body.attachments,
         },
         workflow: {
-          workflow_stage: 'done',
+          workflow_stage: workflowStage,
           collected_facts: draft.collected_facts,
           missing_fields: draft.missing_fields,
           planning: draft.planning,
