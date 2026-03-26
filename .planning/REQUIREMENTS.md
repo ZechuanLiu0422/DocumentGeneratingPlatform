@@ -14,7 +14,7 @@
 
 ### Verification and Safety
 
-- [ ] **SAFE-01**: Maintainer can run automated tests for validation, persistence helpers, and workflow route contracts in CI
+- [x] **SAFE-01**: Maintainer can run automated tests for validation, persistence helpers, and workflow route contracts in CI
 - [ ] **SAFE-02**: Maintainer can run automated auth/RLS regression checks that prove one user cannot access or mutate another user's drafting data
 - [ ] **SAFE-03**: Maintainer can run at least one browser-level smoke test covering the core generate workflow from draft load to review/export readiness
 - [ ] **SAFE-04**: Operator can inspect structured error and performance telemetry for workflow stages, AI providers, and export failures
@@ -75,7 +75,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | FLOW-02 | Phase 1 | Complete |
 | FLOW-03 | Phase 1 | Complete |
 | FLOW-04 | Phase 1 | Complete |
-| SAFE-01 | Phase 2 | Pending |
+| SAFE-01 | Phase 2 | Complete |
 | SAFE-02 | Phase 2 | Pending |
 | SAFE-03 | Phase 2 | Pending |
 | SAFE-04 | Phase 2 | Pending |

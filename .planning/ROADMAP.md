@@ -80,7 +80,7 @@ This brownfield roadmap hardens the existing drafting platform in the order the 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Workflow Integrity Guardrails | 4/4 | Complete | 2026-03-26 |
-| 2. Verification and Telemetry Baseline | 0/TBD | Not started | - |
+| 2. Verification and Telemetry Baseline | 1/4 | In Progress|  |
 | 3. Grounded Drafting and Review Trust | 0/TBD | Not started | - |
 | 4. Durable Execution and Export Hardening | 0/TBD | Not started | - |
 | 5. Generate Workspace Decomposition | 0/TBD | Not started | - |
