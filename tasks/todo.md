@@ -1,13 +1,13 @@
 # TODO
 
 - [x] Begin Phase 2 execution and complete Wave 1 plans
-- [ ] Verify Wave 1 outputs and execute the dependent Wave 2 browser smoke plan
+- [x] Verify Wave 1 outputs and execute the dependent Wave 2 browser smoke plan
 - [x] Execute Phase 02 Plan 01 and commit contract-suite work atomically
 - [x] Execute Phase 02 Plan 02 and commit auth/RLS harness work atomically
 - [x] Execute Phase 02 Plan 04 and commit telemetry baseline work atomically
-- [ ] Execute Phase 02 Plan 03 and commit seeded browser smoke work atomically
-- [ ] Run Phase 2 verification, update planning artifacts, and commit execution results
-- [ ] Record Phase 2 execution review notes
+- [x] Execute Phase 02 Plan 03 and commit seeded browser smoke work atomically
+- [x] Run Phase 2 verification, update planning artifacts, and commit execution results
+- [x] Record Phase 2 execution review notes
 
 - [x] Create Phase 2 planning directory and planning checklist
 - [x] Research Phase 2 verification and telemetry approaches against the current codebase
@@ -102,6 +102,11 @@
 - [x] 重新验证本地 dev 流程并补充 review 记录
 
 ## Review
+
+- Phase 2 execution completed on 2026-03-27 across plans `02-01` through `02-04`, closing SAFE-01 through SAFE-04 before any larger brownfield refactor work.
+- SAFE-03 now has a deterministic local Playwright smoke built on the shared Phase 2 seed harness; it logs in as `phase2.alice@example.com`, opens `/generate?draft=8e274be8-48e6-4065-9b9b-6f8435b6878b`, and proves review/export readiness without live provider calls.
+- Phase 2 verification evidence now includes `npm run test:phase-02:contracts`, `npm run test:phase-02:rls`, `npm run test:phase-02:e2e`, `npm run test:phase-02:telemetry`, and `npm run build`, with the SAFE-03-specific setup path also verified via `npm run test:phase-02:e2e:seed` and `npm run test:phase-02:e2e:install`.
+- Environment note: local SAFE-02/SAFE-03 proof depends on Docker Desktop, Docker socket access for Supabase inspection, and sandbox-free execution when Playwright starts the local Next server on `127.0.0.1:3000`.
 
 - Phase 2 planning completed on 2026-03-26 for [ROADMAP.md](/Users/agent/Desktop/ClaudeCodeTesting/DocuGeneratingPlatform/.planning/ROADMAP.md) phase `Verification and Telemetry Baseline`.
 - Final executable plan set written under [.planning/phases/02-verification-and-telemetry-baseline](/Users/agent/Desktop/ClaudeCodeTesting/DocuGeneratingPlatform/.planning/phases/02-verification-and-telemetry-baseline):
