@@ -25,6 +25,8 @@ data/*.db-journal
 # Temporary files
 .tmp/
 *.docx
+supabase/.branches/
+supabase/.temp/
 
 # IDE
 .vscode/

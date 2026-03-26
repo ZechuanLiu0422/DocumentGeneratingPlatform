@@ -10,6 +10,10 @@
     "test:phase-02:contracts": "node --experimental-strip-types --experimental-test-module-mocks --test-concurrency=1 --test tests/phase-02/contracts/*.test.ts",
     "test:phase-02:contracts:harness": "node --experimental-strip-types --experimental-test-module-mocks --test-concurrency=1 --test tests/phase-02/contracts/harness-smoke.test.ts",
     "test:phase-02:contracts:ci": "npm run test:phase-02:contracts",
+    "test:phase-02:rls:start": "npx supabase start",
+    "test:phase-02:rls:reset": "npm run test:phase-02:rls:start && npx supabase db reset --local --no-seed",
+    "test:phase-02:rls:seed": "node scripts/seed-phase-2.mjs",
+    "test:phase-02:rls": "node --experimental-strip-types --test-concurrency=1 --test tests/phase-02/auth-rls/auth-rls.test.ts",
     "check:deploy": "node --env-file=.env scripts/check-deploy.mjs",
     "check:schema": "node --env-file=.env.local scripts/check-supabase-schema.mjs",
     "invite:user": "node --env-file=.env scripts/invite-user.mjs"
@@ -35,6 +39,7 @@
     "eslint": "^8.57.0",
     "eslint-config-next": "^14.2.0",
     "postcss": "^8",
+    "supabase": "^2.84.4",
     "tailwindcss": "^3.4.0",
     "typescript": "^5"
   }
