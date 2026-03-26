@@ -13,6 +13,9 @@
     "test:phase-02:rls:start": "npx supabase start",
     "test:phase-02:rls:reset": "npm run test:phase-02:rls:start && npx supabase db reset --local --no-seed",
     "test:phase-02:rls:seed": "node scripts/seed-phase-2.mjs",
+    "test:phase-02:e2e:seed": "node scripts/seed-phase-2.mjs --e2e",
+    "test:phase-02:e2e:install": "playwright install chromium",
+    "test:phase-02:e2e": "playwright test --config=playwright.config.ts --project=chromium tests/e2e/generate-smoke.spec.ts",
     "test:phase-02:rls": "node --experimental-strip-types --test-concurrency=1 --test tests/phase-02/auth-rls/auth-rls.test.ts",
     "test:phase-02:telemetry": "node --experimental-strip-types --test tests/phase-02/telemetry/telemetry-contract.test.ts tests/phase-02/telemetry/workflow-route-telemetry.test.ts tests/phase-02/telemetry/health-contract.test.ts",
     "check:deploy": "node --env-file=.env scripts/check-deploy.mjs",
@@ -33,6 +36,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",

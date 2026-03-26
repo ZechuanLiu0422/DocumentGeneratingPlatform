@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 
 import { execFileSync } from 'node:child_process';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
 import { createClient } from '@supabase/supabase-js';
 
 export const PHASE_02_FIXTURES = {
@@ -55,6 +57,7 @@ export const PHASE_02_FIXTURES = {
 };
 
 let cachedLocalSupabaseEnv = null;
+const E2E_SCENARIO_PATH = path.join(process.cwd(), '.tmp', 'phase-02-e2e.json');
 
 function parseEnvOutput(output) {
   return Object.fromEntries(
@@ -119,6 +122,45 @@ export function createSeedAdminClient() {
       persistSession: false,
     },
   });
+}
+
+function buildE2EScenario(seededUsers) {
+  const { url, anonKey } = getLocalSupabaseEnv();
+  const alice = seededUsers.alice;
+
+  return {
+    generatedAt: new Date().toISOString(),
+    baseURL: 'http://127.0.0.1:3000',
+    supabase: {
+      url,
+      anonKey,
+    },
+    user: {
+      id: alice.id,
+      email: alice.email,
+      password: alice.password,
+      displayName: alice.displayName,
+    },
+    draft: {
+      id: PHASE_02_FIXTURES.drafts.alice,
+      generatePath: `/generate?draft=${PHASE_02_FIXTURES.drafts.alice}`,
+      previewTitle: 'alice generated title',
+      sectionHeading: '一、alice 正文',
+      bodyExcerpt: 'alice owned body',
+      versionSummary: 'alice seeded version',
+    },
+  };
+}
+
+export function writeE2EScenario(seededUsers) {
+  mkdirSync(path.dirname(E2E_SCENARIO_PATH), { recursive: true });
+  const scenario = buildE2EScenario(seededUsers);
+  writeFileSync(E2E_SCENARIO_PATH, `${JSON.stringify(scenario, null, 2)}\n`, 'utf8');
+
+  return {
+    path: E2E_SCENARIO_PATH,
+    scenario,
+  };
 }
 
 async function ensureUser(admin, fixture) {
@@ -192,7 +234,7 @@ function buildDraftRow(userKey, userId) {
     provider: 'claude',
     contact_name: `${userKey} 联系人`,
     contact_phone: '12345678',
-    attachments: [{ name: `${userKey}-attachment.txt` }],
+    attachments: [`${userKey}-attachment.txt`],
     workflow_stage: 'review',
     collected_facts: {
       owner: userKey,
@@ -365,13 +407,18 @@ export async function seedPhase02Fixtures() {
 }
 
 async function main() {
+  const shouldWriteE2E = process.argv.includes('--e2e');
   const seeded = await seedPhase02Fixtures();
+  const e2eScenario = shouldWriteE2E ? writeE2EScenario(seeded.users) : null;
 
   console.log('Phase 02 fixtures seeded successfully.');
   for (const user of Object.values(seeded.users)) {
     console.log(`- ${user.email} (${user.id})`);
   }
   console.log(`- drafts: ${Object.values(PHASE_02_FIXTURES.drafts).join(', ')}`);
+  if (e2eScenario) {
+    console.log(`- e2e scenario: ${e2eScenario.path}`);
+  }
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
