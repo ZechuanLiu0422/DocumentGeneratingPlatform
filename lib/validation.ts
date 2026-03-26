@@ -148,6 +148,22 @@ export const draftSchema = z.object({
   generatedContent: optionalLimitedString(20000),
 });
 
+export const draftSaveSchema = draftSchema
+  .pick({
+    id: true,
+    docType: true,
+    title: true,
+    recipient: true,
+    content: true,
+    issuer: true,
+    date: true,
+    provider: true,
+    contactName: true,
+    contactPhone: true,
+    attachments: true,
+  })
+  .strict();
+
 export const polishSchema = z.object({
   docType: docTypeSchema,
   title: z.string().trim().max(200).optional().default(''),
