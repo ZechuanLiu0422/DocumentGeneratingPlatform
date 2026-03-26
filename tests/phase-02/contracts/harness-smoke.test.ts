@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { NextRequest } from 'next/server';
+import { NextRequest } from 'next/server.js';
 import { buildDraftFixture, buildIntakeRequestBody } from './shared-fixtures.ts';
 import { createJsonRequest, withRouteModuleMocks } from './route-contract-helpers.ts';
 
@@ -37,9 +37,9 @@ test('SAFE-01 harness smoke covers scripts, CI wiring, fixtures, and route helpe
 
   const workflow = readProjectFile('.github', 'workflows', 'phase-02-safety.yml');
   assert.match(workflow, /test:phase-02:contracts:ci/);
-  assert.match(workflow, /\bon:\b/);
-  assert.match(workflow, /\bpull_request:\b/);
-  assert.match(workflow, /\bpush:\b/);
+  assert.match(workflow, /^on:\s*$/m);
+  assert.match(workflow, /^\s+pull_request:\s*$/m);
+  assert.match(workflow, /^\s+push:\s*$/m);
 
   const intakeBody = buildIntakeRequestBody();
   assert.equal(intakeBody.docType, 'notice');
@@ -51,7 +51,7 @@ test('SAFE-01 harness smoke covers scripts, CI wiring, fixtures, and route helpe
 
   const request = createJsonRequest('/api/ai/intake', intakeBody);
   assert.ok(request instanceof NextRequest);
-  assert.equal(await request.json(), intakeBody);
+  assert.deepEqual(await request.json(), intakeBody);
 
   const mocked = await withRouteModuleMocks(t, '../../../app/api/ai/intake/route.ts', {
     '@/lib/auth': {
