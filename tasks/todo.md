@@ -1,5 +1,31 @@
 # TODO
 
+- [x] Execute Phase 01 Plan 04 Task 1 with TDD red-green flow
+- [x] Verify Task 1 workflow-stage ownership checks and commit atomically
+- [ ] Execute Phase 01 Plan 04 Task 2 with TDD route adoption flow
+- [ ] Verify Task 2 workflow-stage ownership checks plus lint and commit atomically
+- [ ] Create Phase 01 Plan 04 summary and update planning state artifacts
+- [ ] Record Phase 01 Plan 04 execution review notes
+
+- [ ] Execute Phase 01 Plan 02 Task 1 with TDD red-green flow
+- [ ] Verify Task 1 restore-contract checks and commit atomically
+- [ ] Execute Phase 01 Plan 02 Task 2 with TDD red-green flow
+- [ ] Verify Task 2 restore-contract checks plus lint and commit atomically
+- [ ] Create Phase 01 Plan 02 summary and update planning state artifacts
+- [ ] Record Phase 01 Plan 02 execution review notes
+
+- [x] Execute Phase 01 Plan 01 Task 1 with TDD red-green flow
+- [x] Verify Task 1 contract checks and commit atomically
+- [x] Execute Phase 01 Plan 01 Task 2 with TDD red-green flow
+- [x] Verify Task 2 contract checks plus lint and commit atomically
+- [x] Create Phase 01 Plan 01 summary and update planning state artifacts
+- [ ] Record Phase 01 Plan 01 execution review notes
+
+- [ ] Begin Phase 1 execution and run Wave 1 plans in parallel
+- [ ] Verify Wave 1 outputs and execute the dependent Wave 2 client-alignment plan
+- [ ] Run Phase 1 verification, update planning artifacts, and commit execution results
+- [ ] Record Phase 1 execution review notes
+
 - [x] Revise Phase 1 plans to close the plan-checker blockers
 - [x] Add explicit FLOW-02 coverage for authoritative workflow-stage transitions
 - [x] Replace lint-only verification in Phase 1 plans with executable behavioral checks
