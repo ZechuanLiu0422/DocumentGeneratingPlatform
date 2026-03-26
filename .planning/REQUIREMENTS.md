@@ -71,31 +71,31 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| FLOW-01 | Pending | Pending |
-| FLOW-02 | Pending | Pending |
-| FLOW-03 | Pending | Pending |
-| FLOW-04 | Pending | Pending |
-| SAFE-01 | Pending | Pending |
-| SAFE-02 | Pending | Pending |
-| SAFE-03 | Pending | Pending |
-| SAFE-04 | Pending | Pending |
-| TRUST-01 | Pending | Pending |
-| TRUST-02 | Pending | Pending |
-| TRUST-03 | Pending | Pending |
-| TRUST-04 | Pending | Pending |
-| TRUST-05 | Pending | Pending |
-| OPS-01 | Pending | Pending |
-| OPS-02 | Pending | Pending |
-| OPS-03 | Pending | Pending |
-| UX-01 | Pending | Pending |
-| UX-02 | Pending | Pending |
-| UX-03 | Pending | Pending |
+| FLOW-01 | Phase 1 | Pending |
+| FLOW-02 | Phase 1 | Pending |
+| FLOW-03 | Phase 1 | Pending |
+| FLOW-04 | Phase 1 | Pending |
+| SAFE-01 | Phase 2 | Pending |
+| SAFE-02 | Phase 2 | Pending |
+| SAFE-03 | Phase 2 | Pending |
+| SAFE-04 | Phase 2 | Pending |
+| TRUST-01 | Phase 3 | Pending |
+| TRUST-02 | Phase 3 | Pending |
+| TRUST-03 | Phase 3 | Pending |
+| TRUST-04 | Phase 3 | Pending |
+| TRUST-05 | Phase 3 | Pending |
+| OPS-01 | Phase 4 | Pending |
+| OPS-02 | Phase 4 | Pending |
+| OPS-03 | Phase 4 | Pending |
+| UX-01 | Phase 5 | Pending |
+| UX-02 | Phase 5 | Pending |
+| UX-03 | Phase 4 | Pending |
 
 **Coverage:**
 - v1 requirements: 19 total
-- Mapped to phases: 0
-- Unmapped: 19 ⚠️
+- Mapped to phases: 19
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-26*
-*Last updated: 2026-03-26 after initial definition*
+*Last updated: 2026-03-26 after roadmap creation*

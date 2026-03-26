@@ -1,5 +1,11 @@
 # TODO
 
+- [x] Initialize `.planning/PROJECT.md` for the brownfield document-generation platform
+- [x] Create `.planning/config.json` with GSD workflow defaults for this repo
+- [x] Produce `.planning/research/` project research artifacts
+- [x] Generate `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, and `.planning/STATE.md`
+- [x] Refresh `AGENTS.md`, verify planning artifacts, and commit initialization docs
+
 - [x] Refresh `.planning/codebase/` documents for the current codebase state
 - [x] Run parallel mapper agents for tech, architecture, quality, and concerns
 - [x] Verify all 7 refreshed codebase documents exist with updated line counts
@@ -39,6 +45,19 @@
 - [x] 重新验证本地 dev 流程并补充 review 记录
 
 ## Review
+
+- Brownfield GSD project initialization completed on 2026-03-26 for the existing official-document generation platform.
+- Created and committed [.planning/PROJECT.md](/Users/agent/Desktop/ClaudeCodeTesting/DocuGeneratingPlatform/.planning/PROJECT.md) plus [.planning/config.json](/Users/agent/Desktop/ClaudeCodeTesting/DocuGeneratingPlatform/.planning/config.json) using recommended defaults: `yolo`, `standard` granularity, parallel execution, committed docs, and research/plan-check/verifier enabled.
+- Research stage completed via parallel researcher agents and synthesized into `.planning/research/`: `STACK.md` (136 lines), `FEATURES.md` (172), `ARCHITECTURE.md` (425), `PITFALLS.md` (136), `SUMMARY.md` (161).
+- Defined 19 v1 requirements in [.planning/REQUIREMENTS.md](/Users/agent/Desktop/ClaudeCodeTesting/DocuGeneratingPlatform/.planning/REQUIREMENTS.md), centered on workflow integrity, safety rails, grounded drafting trust, durable operations, and generate-workspace maintainability.
+- Roadmapper produced a 5-phase roadmap with full traceability coverage in [.planning/ROADMAP.md](/Users/agent/Desktop/ClaudeCodeTesting/DocuGeneratingPlatform/.planning/ROADMAP.md) and [.planning/STATE.md](/Users/agent/Desktop/ClaudeCodeTesting/DocuGeneratingPlatform/.planning/STATE.md):
+- Phase 1: Workflow Integrity Guardrails
+- Phase 2: Verification and Telemetry Baseline
+- Phase 3: Grounded Drafting and Review Trust
+- Phase 4: Durable Execution and Export Hardening
+- Phase 5: Generate Workspace Decomposition
+- Verification checks included reading the generated `PROJECT.md`, `config.json`, `SUMMARY.md`, `REQUIREMENTS.md`, `ROADMAP.md`, and `STATE.md`, plus `ls -la .planning/research`, `wc -l .planning/research/*.md`, and final `git status --short`.
+- Workflow note: `node "$HOME/.codex/get-shit-done/bin/gsd-tools.cjs" generate-claude-md` updated [CLAUDE.md](/Users/agent/Desktop/ClaudeCodeTesting/DocuGeneratingPlatform/CLAUDE.md) rather than `AGENTS.md`; kept that generated project guide as-is because the repo already has a hand-authored `AGENTS.md`.
 
 - Codebase map refresh completed on 2026-03-26 via four parallel `gsd-codebase-mapper` agents with isolated scopes: tech, arch, quality, and concerns.
 - Refreshed outputs verified in `.planning/codebase/`: `STACK.md` (85 lines), `INTEGRATIONS.md` (117), `ARCHITECTURE.md` (166), `STRUCTURE.md` (187), `CONVENTIONS.md` (118), `TESTING.md` (151), `CONCERNS.md` (138).
