@@ -1,5 +1,14 @@
 # TODO
 
+- [ ] Begin Phase 2 execution and complete Wave 1 plans
+- [ ] Verify Wave 1 outputs and execute the dependent Wave 2 browser smoke plan
+- [ ] Execute Phase 02 Plan 01 and commit contract-suite work atomically
+- [x] Execute Phase 02 Plan 02 and commit auth/RLS harness work atomically
+- [ ] Execute Phase 02 Plan 04 and commit telemetry baseline work atomically
+- [ ] Execute Phase 02 Plan 03 and commit seeded browser smoke work atomically
+- [ ] Run Phase 2 verification, update planning artifacts, and commit execution results
+- [ ] Record Phase 2 execution review notes
+
 - [x] Create Phase 2 planning directory and planning checklist
 - [x] Research Phase 2 verification and telemetry approaches against the current codebase
 - [x] Generate executable PLAN.md files for Phase 2 verification-and-telemetry work

@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Ready to execute
-stopped_at: Completed 02-01-PLAN.md
-last_updated: "2026-03-26T15:52:09.194Z"
+stopped_at: Completed 02-02-PLAN.md
+last_updated: "2026-03-26T16:55:21Z"
 progress:
   total_phases: 5
   completed_phases: 1
   total_plans: 8
-  completed_plans: 5
+  completed_plans: 6
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-03-26)
 ## Current Position
 
 Phase: 02 (verification-and-telemetry-baseline) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 
 ## Performance Metrics
 
@@ -60,18 +60,20 @@ Recent decisions affecting current work:
 - [Phase 02]: Kept SAFE-01 on node:test and extended the existing Phase 1 runner instead of adding a new framework.
 - [Phase 02]: Loaded route handlers through rewritten temp .ts modules under .tmp so contract tests can resolve next/server and @/* imports without touching production code.
 - [Phase 02]: Serialized the SAFE-01 contract suite with --test-concurrency=1 because the helper-based route mocks need deterministic execution.
+- [Phase 02]: SAFE-02 seeds and auth helpers derive local Supabase URL/keys from `npx supabase status -o env` so proof stays on the local stack instead of `.env.local`.
+- [Phase 02]: Local Supabase auth email login must stay enabled in `supabase/config.toml` because SAFE-02 proves real authenticated anon-client RLS, not service-role shortcuts.
 
 ### Pending Todos
 
-- Phase 2 needs planning for automated test coverage, auth isolation verification, browser smoke tests, and telemetry instrumentation.
+- Phase 2 Wave 1 still needs SAFE-04 telemetry baseline execution before SAFE-03 browser smoke can begin.
 
 ### Blockers/Concerns
 
-- Phase 2 should decide early whether browser smoke coverage is Playwright-first or route-contract-first so SAFE-03 stays right-sized.
-- Telemetry scope for SAFE-04 still needs concrete storage/reporting choices before implementation starts.
+- SAFE-03 depends on the shared Phase 2 seed harness staying stable because it now reuses the same local Supabase fixtures.
+- SAFE-04 should preserve the existing JSON log pattern in `lib/api.ts` instead of introducing a separate observability stack.
 
 ## Session Continuity
 
 Last session: 2026-03-26T15:52:09.192Z
-Stopped at: Completed 02-01-PLAN.md
+Stopped at: Completed 02-02-PLAN.md
 Resume file: None
