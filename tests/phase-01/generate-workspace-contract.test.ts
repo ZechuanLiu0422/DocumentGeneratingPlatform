@@ -1,6 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { buildDraftSaveRequest, deriveHydratedDraftView } from '../../lib/generate-workspace.ts';
+
+const currentFile = fileURLToPath(import.meta.url);
+const currentDir = path.dirname(currentFile);
 
 function createDraftSnapshot() {
   return {
@@ -129,4 +135,14 @@ test('deriveHydratedDraftView uses the authoritative draft snapshot to rebuild w
   assert.deepEqual(hydrated.activeRuleIds, ['rule-1']);
   assert.deepEqual(hydrated.activeReferenceIds, ['ref-1']);
   assert.equal(hydrated.readiness, 'ready');
+});
+
+test('generate workspace save and restore handlers hydrate from authoritative draft responses', () => {
+  const source = readFileSync(path.resolve(currentDir, '../../app/generate/page.tsx'), 'utf8');
+
+  assert.match(source, /buildDraftSaveRequest\(/);
+  assert.match(source, /hydrateDraft\(data\.draft\)/);
+  assert.match(source, /fetchVersions\(data\.draft\.id\)/);
+  assert.doesNotMatch(source, /data\.version\?/);
+  assert.doesNotMatch(source, /workflowStage,\s*\n\s*collectedFacts,/);
 });

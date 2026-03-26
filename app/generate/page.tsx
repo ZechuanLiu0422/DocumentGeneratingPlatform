@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { buildDraftSaveRequest, deriveHydratedDraftView } from '@/lib/generate-workspace';
 
 type Phrase = {
   id: string;
@@ -170,15 +171,6 @@ function compileSections(sections: DraftSection[]) {
     .join('\n\n');
 }
 
-function mapStageToStep(stage?: WorkflowStage) {
-  if (!stage || stage === 'intake') return 'intake';
-  if (stage === 'planning') return 'planning';
-  if (stage === 'outline') return 'outline';
-  if (stage === 'draft') return 'draft';
-  if (stage === 'review' || stage === 'done') return 'review';
-  return 'intake';
-}
-
 function formatFactValue(value: string | string[]) {
   return Array.isArray(value) ? value.join('；') : value;
 }
@@ -312,37 +304,30 @@ function GeneratePageContent() {
   const busy = Boolean(busyAction);
 
   const hydrateDraft = (draft: Draft) => {
-    setCurrentDraftId(draft.id);
-    setDocType(draft.doc_type);
-    setProvider(draft.provider);
-    setWorkflowStage(draft.workflowStage || 'intake');
-    setCurrentStep(mapStageToStep(draft.workflowStage || 'intake'));
-    setFormData({
-      title: draft.generatedTitle || draft.title || '',
-      recipient: draft.recipient || '',
-      content: draft.content || '',
-      issuer: draft.issuer || '',
-      date: draft.date || new Date().toISOString().split('T')[0],
-      contactName: draft.contactName || '',
-      contactPhone: draft.contactPhone || '',
-    });
-    setAttachments(draft.attachments || []);
-    setCollectedFacts(draft.collectedFacts || {});
-    setMissingFields(draft.missingFields || []);
-    setReadiness((draft.missingFields || []).length === 0 ? 'ready' : 'needs_more');
-    setActiveRuleIds(draft.activeRuleIds || []);
-    setActiveReferenceIds(draft.activeReferenceIds || []);
-    const planningOptionsFromDraft = draft.planning?.options || [];
-    setPlanningVersion(draft.planning?.planVersion || '');
-    setPlanningOptions(planningOptionsFromDraft);
-    setSelectedPlanId(draft.planning?.selectedPlanId || planningOptionsFromDraft[0]?.planId || '');
-    setPlanningSections(draft.planning?.sections || planningOptionsFromDraft[0]?.sections || []);
-    setPlanningConfirmed(Boolean(draft.planning?.confirmed));
-    setOutlineVersion(draft.outline?.outlineVersion || '');
-    setTitleOptions(draft.outline?.titleOptions || []);
-    setOutlineSections(draft.outline?.sections || []);
-    setOutlineRisks(draft.outline?.risks || []);
-    setSections(draft.sections || []);
+    const hydratedView = deriveHydratedDraftView(draft);
+
+    setCurrentDraftId(hydratedView.currentDraftId);
+    setDocType(hydratedView.docType);
+    setProvider(hydratedView.provider);
+    setWorkflowStage(hydratedView.workflowStage);
+    setCurrentStep(hydratedView.currentStep);
+    setFormData(hydratedView.formData);
+    setAttachments(hydratedView.attachments);
+    setCollectedFacts(hydratedView.collectedFacts);
+    setMissingFields(hydratedView.missingFields);
+    setReadiness(hydratedView.readiness);
+    setActiveRuleIds(hydratedView.activeRuleIds);
+    setActiveReferenceIds(hydratedView.activeReferenceIds);
+    setPlanningVersion(hydratedView.planningVersion);
+    setPlanningOptions(hydratedView.planningOptions);
+    setSelectedPlanId(hydratedView.selectedPlanId);
+    setPlanningSections(hydratedView.planningSections);
+    setPlanningConfirmed(hydratedView.planningConfirmed);
+    setOutlineVersion(hydratedView.outlineVersion);
+    setTitleOptions(hydratedView.titleOptions);
+    setOutlineSections(hydratedView.outlineSections);
+    setOutlineRisks(hydratedView.outlineRisks);
+    setSections(hydratedView.sections);
   };
 
   const fetchVersions = async (draftId: string) => {
@@ -529,47 +514,22 @@ function GeneratePageContent() {
     const response = await fetch('/api/drafts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        id: currentDraftId,
-        docType,
-        ...formData,
-        provider,
-        attachments,
-        workflowStage,
-        collectedFacts,
-        missingFields,
-        planning: planningSections.length || planningOptions.length
-          ? {
-              options: planningOptions,
-              selectedPlanId,
-              sections: planningSections,
-              planVersion: planningVersion,
-              confirmed: planningConfirmed,
-            }
-          : null,
-        outline: outlineSections.length
-          ? {
-              titleOptions,
-              sections: outlineSections,
-              risks: outlineRisks,
-              outlineVersion,
-              confirmed: workflowStage !== 'outline',
-            }
-          : null,
-        sections,
-        activeRuleIds,
-        activeReferenceIds,
-        versionCount: versions.length,
-        generatedTitle: formData.title,
-        generatedContent: previewContent,
-      }),
+      body: JSON.stringify(
+        buildDraftSaveRequest({
+          currentDraftId,
+          docType,
+          formData,
+          provider,
+          attachments,
+        })
+      ),
     });
 
     const data = await response.json();
     if (response.ok) {
-      setCurrentDraftId(data.draftId);
-      if (data.draftId) {
-        fetchVersions(data.draftId);
+      if (data.draft) {
+        hydrateDraft(data.draft);
+        fetchVersions(data.draft.id);
       }
       alert('草稿已保存');
     } else {
@@ -1128,13 +1088,10 @@ function GeneratePageContent() {
       return;
     }
 
-    if (data.version?.title) {
-      setFormData((prev) => ({ ...prev, title: data.version.title }));
+    if (data.draft) {
+      hydrateDraft(data.draft);
+      fetchVersions(data.draft.id);
     }
-    setSections(data.version?.sections || []);
-    setWorkflowStage('draft');
-    setCurrentStep('draft');
-    fetchVersions(currentDraftId);
   };
 
   const handleDownload = async () => {
