@@ -20,11 +20,19 @@ export async function POST(request: NextRequest) {
     context.userId = user.id;
     const body = intakeSchema.parse(await request.json());
     context.provider = body.provider;
+    context.doc_type = body.docType;
+    context.workflow_action = 'intake';
+    if (body.draftId) {
+      context.draft_id = body.draftId;
+    }
 
     enforceRateLimit(`intake:${user.id}`, 15, 60 * 1000, '追问过于频繁，请稍后再试');
     await enforceDailyQuota(supabase, user.id, 'intake');
 
     const existingDraft = body.draftId ? await getDraftById(supabase, user.id, body.draftId) : null;
+    if (existingDraft?.workflow_stage) {
+      context.workflow_stage = existingDraft.workflow_stage;
+    }
     const { rules, references } = await loadRuleAndReferenceContext({
       supabase,
       userId: user.id,
@@ -74,6 +82,9 @@ export async function POST(request: NextRequest) {
       provider: body.provider,
       status: 'success',
     });
+
+    context.draft_id = draft.id;
+    context.workflow_stage = draft.workflow_stage;
 
     return ok(context, {
       draftId: draft.id,

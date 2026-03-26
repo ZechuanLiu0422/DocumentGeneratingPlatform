@@ -20,11 +20,15 @@ export async function POST(request: NextRequest) {
     context.userId = user.id;
     const body = outlineRequestSchema.parse(await request.json());
     context.provider = body.provider;
+    context.draft_id = body.draftId;
+    context.workflow_action = 'outline';
 
     enforceRateLimit(`outline:${user.id}`, 10, 60 * 1000, '提纲生成过于频繁，请稍后再试');
     await enforceDailyQuota(supabase, user.id, 'outline');
 
     const draft = await getDraftById(supabase, user.id, body.draftId);
+    context.doc_type = draft.doc_type;
+    context.workflow_stage = draft.workflow_stage;
     const { rules, references } = await loadRuleAndReferenceContext({
       supabase,
       userId: user.id,
@@ -143,6 +147,7 @@ export async function POST(request: NextRequest) {
       status: 'success',
     });
 
+    context.workflow_stage = workflowStage;
     return ok(context, result);
   } catch (error) {
     try {

@@ -20,11 +20,15 @@ export async function POST(request: NextRequest) {
     context.userId = user.id;
     const body = reviewRequestSchema.parse(await request.json());
     context.provider = body.provider;
+    context.draft_id = body.draftId;
+    context.workflow_action = 'review';
 
     enforceRateLimit(`review:${user.id}`, 8, 60 * 1000, '审校过于频繁，请稍后再试');
     await enforceDailyQuota(supabase, user.id, 'review');
 
     const draft = await getDraftById(supabase, user.id, body.draftId);
+    context.doc_type = draft.doc_type;
+    context.workflow_stage = draft.workflow_stage;
     const { rules, references } = await loadRuleAndReferenceContext({
       supabase,
       userId: user.id,
@@ -96,6 +100,7 @@ export async function POST(request: NextRequest) {
       status: 'success',
     });
 
+    context.workflow_stage = workflowStage;
     return ok(context, { checks });
   } catch (error) {
     try {

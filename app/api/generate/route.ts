@@ -23,9 +23,19 @@ export async function POST(request: NextRequest) {
     context.userId = user.id;
     const body = generateSchema.parse(await request.json());
     context.provider = body.provider;
+    context.doc_type = body.docType;
+    context.workflow_action = 'export';
+    if (body.draftId) {
+      context.draft_id = body.draftId;
+    }
 
     enforceRateLimit(`generate:${user.id}`, 8, 60 * 1000, '导出过于频繁，请稍后再试');
     await enforceDailyQuota(supabase, user.id, 'generate');
+
+    const draft = body.draftId ? await getDraftById(supabase, user.id, body.draftId) : null;
+    if (draft?.workflow_stage) {
+      context.workflow_stage = draft.workflow_stage;
+    }
 
     const fileBuffer = await generateDocumentBuffer(body.docType, {
       title: body.title,
@@ -64,8 +74,8 @@ export async function POST(request: NextRequest) {
       status: 'success',
     });
 
-    if (body.draftId) {
-      const draft = await getDraftById(supabase, user.id, body.draftId);
+    if (draft) {
+      context.workflow_stage = draft.workflow_stage;
       const workflowStage = getAuthoritativeWorkflowStage('export_completed');
       await saveDraftState(supabase, {
         userId: user.id,
@@ -106,12 +116,16 @@ export async function POST(request: NextRequest) {
         sections: body.sections.length > 0 ? body.sections : draft.sections,
         changeSummary: '已导出 Word 定稿',
       });
+
+      context.workflow_stage = workflowStage;
     }
 
     return ok(context, {
       success: true,
       file_data: fileBuffer.toString('base64'),
       file_name: `${sanitizeTitle(body.title)}.docx`,
+    }, 200, {
+      export_size_bytes: fileBuffer.byteLength,
     });
   } catch (error) {
     try {

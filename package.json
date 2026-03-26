@@ -14,6 +14,7 @@
     "test:phase-02:rls:reset": "npm run test:phase-02:rls:start && npx supabase db reset --local --no-seed",
     "test:phase-02:rls:seed": "node scripts/seed-phase-2.mjs",
     "test:phase-02:rls": "node --experimental-strip-types --test-concurrency=1 --test tests/phase-02/auth-rls/auth-rls.test.ts",
+    "test:phase-02:telemetry": "node --experimental-strip-types --test tests/phase-02/telemetry/telemetry-contract.test.ts tests/phase-02/telemetry/workflow-route-telemetry.test.ts tests/phase-02/telemetry/health-contract.test.ts",
     "check:deploy": "node --env-file=.env scripts/check-deploy.mjs",
     "check:schema": "node --env-file=.env.local scripts/check-supabase-schema.mjs",
     "invite:user": "node --env-file=.env scripts/invite-user.mjs"

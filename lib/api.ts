@@ -10,6 +10,8 @@ export type RequestContext = {
   [key: string]: unknown;
 };
 
+type RequestLogExtra = Record<string, unknown>;
+
 export class AppError extends Error {
   status: number;
   code: string;
@@ -108,31 +110,79 @@ function normalizeError(error: unknown) {
   return new AppError(500, '系统繁忙，请稍后重试', 'INTERNAL_ERROR');
 }
 
+function pickContextValue(context: RequestContext, camelKey: string, snakeKey = camelKey) {
+  return context[camelKey] ?? context[snakeKey];
+}
+
+function normalizeLogExtra(extra: RequestLogExtra) {
+  const normalized = { ...extra };
+
+  if (typeof normalized.code === 'string' && typeof normalized.error_code !== 'string') {
+    normalized.error_code = normalized.code;
+  }
+
+  delete normalized.code;
+  return normalized;
+}
+
+export function classifyProviderFailure(errorCode: unknown) {
+  switch (errorCode) {
+    case 'AI_AUTH_FAILED':
+      return 'auth';
+    case 'AI_RATE_LIMITED':
+      return 'rate_limit';
+    case 'AI_TIMEOUT':
+      return 'timeout';
+    case 'AI_REQUEST_FAILED':
+      return 'request_failed';
+    default:
+      return undefined;
+  }
+}
+
+export function buildLogPayload(
+  context: RequestContext,
+  status: number,
+  extra: RequestLogExtra = {}
+) {
+  const durationMs = Math.round(performance.now() - Number(context.startedAt || 0));
+  const normalizedExtra = normalizeLogExtra(extra);
+  const errorCode = normalizedExtra.error_code;
+  const providerFailureKind = classifyProviderFailure(errorCode);
+
+  return {
+    level: status >= 500 ? 'error' : 'info',
+    request_id: context.requestId,
+    route: context.route,
+    user_id: pickContextValue(context, 'userId', 'user_id'),
+    provider: pickContextValue(context, 'provider'),
+    ip: context.ip,
+    status,
+    duration_ms: durationMs,
+    draft_id: pickContextValue(context, 'draftId', 'draft_id'),
+    doc_type: pickContextValue(context, 'docType', 'doc_type'),
+    workflow_action: pickContextValue(context, 'workflowAction', 'workflow_action'),
+    workflow_stage: pickContextValue(context, 'workflowStage', 'workflow_stage'),
+    ...normalizedExtra,
+    provider_failure_kind: normalizedExtra.provider_failure_kind ?? providerFailureKind,
+  };
+}
+
 export function logRequestResult(
   context: RequestContext,
   status: number,
-  extra: Record<string, unknown> = {}
+  extra: RequestLogExtra = {}
 ) {
-  const durationMs = Math.round(performance.now() - Number(context.startedAt || 0));
-
-  console.log(
-    JSON.stringify({
-      level: status >= 500 ? 'error' : 'info',
-      request_id: context.requestId,
-      route: context.route,
-      user_id: context.userId,
-      provider: context.provider,
-      ip: context.ip,
-      status,
-      duration_ms: durationMs,
-      ...extra,
-    })
-  );
+  console.log(JSON.stringify(buildLogPayload(context, status, extra)));
 }
 
-export function handleRouteError(error: unknown, context: RequestContext) {
+export function handleRouteError(error: unknown, context: RequestContext, extra: RequestLogExtra = {}) {
   const normalized = normalizeError(error);
-  logRequestResult(context, normalized.status, { code: normalized.code, message: normalized.message });
+  logRequestResult(context, normalized.status, {
+    ...extra,
+    error_code: normalized.code,
+    message: normalized.message,
+  });
 
   return NextResponse.json(
     {
@@ -144,7 +194,7 @@ export function handleRouteError(error: unknown, context: RequestContext) {
   );
 }
 
-export function ok<T>(context: RequestContext, payload: T, status = 200) {
-  logRequestResult(context, status);
+export function ok<T>(context: RequestContext, payload: T, status = 200, extra: RequestLogExtra = {}) {
+  logRequestResult(context, status, extra);
   return NextResponse.json(payload, { status });
 }

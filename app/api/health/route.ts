@@ -16,12 +16,10 @@ export async function GET(request: NextRequest) {
 
     return ok(context, {
       status,
-      enabledProviders,
       checks: {
         publicEnv: missingPublicEnv.length === 0,
         aiProviderConfigured: enabledProviders.length > 0,
       },
-      missingPublicEnv,
     });
   } catch (error) {
     return handleRouteError(error, context);
