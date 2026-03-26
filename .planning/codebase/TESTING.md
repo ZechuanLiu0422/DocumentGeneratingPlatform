@@ -1,48 +1,151 @@
-# Testing
+# Testing Patterns
 
-## Current State
+**Analysis Date:** 2026-03-26
 
-- There is no dedicated automated test suite in the repository.
-- No `tests/`, `__tests__/`, `e2e/`, Playwright config, Vitest config, Jest config, or GitHub Actions workflow is present.
-- `package.json` does not define a `test` script.
+## Test Framework
 
-## Existing Verification Mechanisms
+**Runner:**
+- Not detected.
+- Config: Not detected in `package.json`, and no `jest.config.*`, `vitest.config.*`, `playwright.config.*`, or `pytest.ini` files are present at repo root.
 
-- `npm run build` is the main compile-time verification path.
-- `npm run check:deploy` runs deployment-preflight validation through `scripts/check-deploy.mjs`.
-- `npm run check:schema` runs runtime Supabase checks through `scripts/check-supabase-schema.mjs`.
-- Operational verification is also documented in `README.md` and `DEPLOYMENT_CHECKLIST.md`.
+**Assertion Library:**
+- Not detected.
 
-## Runtime Safety Nets
+**Run Commands:**
+```bash
+npm run build         # Primary compile-time verification
+npm run check:deploy  # Local deployment preflight from `scripts/check-deploy.mjs`
+npm run check:schema  # Supabase schema smoke check from `scripts/check-supabase-schema.mjs`
+```
 
-- Input validation is strong because route handlers rely on zod schemas from `lib/validation.ts`.
-- Auth boundaries are consistently enforced through `requireRouteUser(...)` in `lib/auth.ts`.
-- Daily quotas and short-term rate limits in `lib/quota.ts` and `lib/ratelimit.ts` act as operational guardrails rather than formal tests.
-- Migration drift is partially detected by schema mismatch handling in `lib/api.ts`.
+## Test File Organization
 
-## What Gets Manually Checked
+**Location:**
+- No automated test directories or co-located test files were found. A repo scan returned no `*.test.*` or `*.spec.*` files under `app/`, `components/`, `lib/`, `scripts/`, `tools/`, or `types/`.
 
-- Login, password-change, draft loading, and history/settings flows are checked by visiting pages such as `app/login/page.tsx`, `app/change-password/page.tsx`, `app/page.tsx`, and `app/history/page.tsx`.
-- Collaborative writing flows are manually exercised through `app/generate/page.tsx` and the `app/api/ai/*` routes.
-- Export behavior is manually verified through `app/api/generate/route.ts` and `lib/document-generator.ts`.
+**Naming:**
+- Not applicable. No test file naming convention is currently established.
 
-## Coverage Gaps
+**Structure:**
+```text
+No `tests/`, `__tests__/`, `e2e/`, `*.test.*`, or `*.spec.*` files detected.
+```
 
-- No automated regression coverage exists for the multi-step intake -> planning -> outline -> draft -> review flow.
-- No tests assert the expected shape of the JSON stored in `drafts.planning`, `drafts.outline`, or `drafts.sections`.
-- No unit tests protect prompt-generation or provider-routing logic in `lib/official-document-ai.ts` and `lib/official-document-workflow.ts`.
-- No integration tests verify RLS expectations against the Supabase schema.
-- No snapshot tests or golden files validate `.docx` export output from `lib/document-generator.ts`.
+## Test Structure
 
-## Risky Areas Without Tests
+**Suite Organization:**
+```typescript
+// Not applicable: no `describe(...)` / `it(...)` suites exist in the repository.
+```
 
-- The very large `app/generate/page.tsx` interaction surface.
-- The schema-sensitive persistence helpers in `lib/collaborative-store.ts`.
-- File parsing in `lib/file-parser.ts`, especially PDF extraction behavior.
-- The custom dev-runtime patcher in `scripts/run-next-dev.mjs`.
+**Patterns:**
+- Verification is command-driven rather than framework-driven. The current safety net is a combination of `npm run build`, `npm run check:deploy`, and `npm run check:schema` from `package.json`.
+- API safety relies on runtime guards in production code: Zod parsing in `lib/validation.ts`, auth checks in `lib/auth.ts`, rate limiting in `lib/ratelimit.ts`, and quotas in `lib/quota.ts`.
+- Manual regression notes are recorded in `tasks/todo.md` under `## Review`, including repeated `npm run build` runs and spot checks against dev routes.
 
-## Suggested Next Testing Steps
+## Mocking
 
-- Add unit tests for `lib/validation.ts`, `lib/api.ts`, and `lib/document-generator.ts`.
-- Add route-level integration tests for `app/api/ai/intake/route.ts`, `app/api/ai/outline/route.ts`, and `app/api/ai/draft/route.ts`.
-- Add an end-to-end smoke test for the core `/generate` authoring path.
+**Framework:** Not applicable
+
+**Patterns:**
+```typescript
+// Current repo pattern is smoke-checking live boundaries rather than mocking them.
+const checks = [
+  {
+    label: 'drafts planning column',
+    migration: '20260323150000_outline_planning_upgrade.sql',
+    run: () => client.from('drafts').select('id,planning').limit(1),
+  },
+];
+```
+
+This pattern comes from `scripts/check-supabase-schema.mjs`.
+
+**What to Mock:**
+- No project-standard mocking library or helper exists yet.
+- If automated tests are added, external AI providers from `lib/providers.ts` and Supabase clients from `lib/supabase/server.ts` are the first boundaries that should be isolated.
+
+**What NOT to Mock:**
+- Do not replace Zod schemas in `lib/validation.ts` with fake validators; those schemas are the contract worth asserting.
+- Do not bypass route-level error normalization in `lib/api.ts`; tests should observe the real `AppError` to `handleRouteError(...)` flow.
+
+## Fixtures and Factories
+
+**Test Data:**
+```typescript
+// Not detected: no shared fixtures, factories, or seed builders in the repo.
+```
+
+**Location:**
+- Not applicable. No fixture directories or helper factories are present.
+
+## Coverage
+
+**Requirements:** None enforced
+
+**View Coverage:**
+```bash
+# Not available: no coverage tool or script is configured in `package.json`.
+```
+
+## Test Types
+
+**Unit Tests:**
+- Not used. No unit test runner or assertion library is configured for helpers such as `lib/api.ts`, `lib/document-generator.ts`, or `lib/validation.ts`.
+
+**Integration Tests:**
+- Not used as a formal suite.
+- The closest equivalent is direct environment or database smoke checking in `scripts/check-deploy.mjs` and `scripts/check-supabase-schema.mjs`.
+
+**E2E Tests:**
+- Not used.
+- Manual UI verification is implied by the review log in `tasks/todo.md`, especially for `/generate`, `/login`, and dev startup behavior.
+
+## Common Patterns
+
+**Async Testing:**
+```javascript
+// Current repo verification pattern is executable smoke checks in Node scripts.
+for (const check of checks) {
+  const { error } = await check.run();
+  if (error) {
+    failed = true;
+  }
+}
+```
+
+This pattern is implemented in `scripts/check-supabase-schema.mjs`.
+
+**Error Testing:**
+```typescript
+if (error || !user) {
+  throw new AppError(401, '登录状态已失效，请重新登录', 'UNAUTHORIZED');
+}
+```
+
+This production guard from `lib/auth.ts` is representative of the behavior that future tests should assert.
+
+## Current Verification Surface
+
+- `npm run build` validates that Next.js pages, routes, and TypeScript compile together. This is the only repo-wide automated check guaranteed to run without external services.
+- `scripts/check-deploy.mjs` validates required env keys, AI provider configuration, and the presence of migration files before deployment.
+- `scripts/check-supabase-schema.mjs` performs live Supabase queries for required tables and columns, so it acts as a schema smoke test rather than a pure unit test.
+- `tasks/todo.md` serves as the historical record of manual verification. It documents repeated build runs and local checks for the `/generate` flow, login redirects, and dev runtime behavior.
+
+## Highest-Risk Untested Areas
+
+- `app/generate/page.tsx` contains the largest interactive surface and extensive local state, but has no component or browser automation coverage.
+- `app/api/ai/outline/route.ts`, `app/api/ai/draft/route.ts`, and neighboring AI routes orchestrate auth, quotas, persistence, and model workflows with no route-level automated regression tests.
+- `lib/collaborative-store.ts` transforms Supabase rows into app state and versions, but there are no tests for normalization or persistence edge cases.
+- `scripts/run-next-dev.mjs` mutates `.next/server/webpack-runtime.js` and renames `.next`, but that behavior is only validated manually.
+
+## Guidance For New Tests
+
+- Put pure logic tests first around `lib/validation.ts`, `lib/api.ts`, `lib/providers.ts`, and `lib/document-generator.ts`.
+- Add route integration tests that exercise the real request pipeline used in `app/api/drafts/route.ts` and `app/api/ai/outline/route.ts`: request parsing, auth gating, quota/rate-limit behavior, and normalized error responses.
+- Add one smoke-style browser test for the authoring workflow in `app/generate/page.tsx` before expanding coverage elsewhere.
+- Reuse existing command-oriented verification scripts as setup or health checks rather than replacing them; `scripts/check-deploy.mjs` and `scripts/check-supabase-schema.mjs` already encode important deployment assumptions.
+
+---
+
+*Testing analysis: 2026-03-26*

@@ -1,5 +1,15 @@
 # TODO
 
+- [x] Refresh `.planning/codebase/` documents for the current codebase state
+- [x] Run parallel mapper agents for tech, architecture, quality, and concerns
+- [x] Verify all 7 refreshed codebase documents exist with updated line counts
+- [x] Record refresh review notes and commit the regenerated docs
+
+- [x] Create `.planning/codebase/` for the initial brownfield codebase map
+- [x] Run parallel mapper agents for tech, architecture, quality, and concerns
+- [x] Verify all 7 codebase documents exist with line counts
+- [x] Record codebase mapping review notes and commit the generated docs
+
 - [x] Fetch upstream install instructions and confirm required local paths
 - [x] Install `obra/superpowers` into `~/.codex/superpowers`
 - [x] Symlink repo skills into `~/.agents/skills/superpowers`
@@ -29,6 +39,18 @@
 - [x] 重新验证本地 dev 流程并补充 review 记录
 
 ## Review
+
+- Codebase map refresh completed on 2026-03-26 via four parallel `gsd-codebase-mapper` agents with isolated scopes: tech, arch, quality, and concerns.
+- Refreshed outputs verified in `.planning/codebase/`: `STACK.md` (85 lines), `INTEGRATIONS.md` (117), `ARCHITECTURE.md` (166), `STRUCTURE.md` (187), `CONVENTIONS.md` (118), `TESTING.md` (151), `CONCERNS.md` (138).
+- Verification commands:
+- `ls -la .planning/codebase`
+- `wc -l .planning/codebase/*.md`
+- `git status --short`
+- Worktree after refresh only contained the seven regenerated codebase documents plus `tasks/todo.md`, so the documentation commit was safe to create without bundling unrelated changes.
+
+- Codebase map output created in `.planning/codebase/`: `STACK.md`, `INTEGRATIONS.md`, `ARCHITECTURE.md`, `STRUCTURE.md`, `CONVENTIONS.md`, `TESTING.md`, `CONCERNS.md`.
+- Mapping process note: the dedicated `gsd-codebase-mapper` subagents failed twice due upstream stream disconnects, so the run was completed via the workflow's sequential local-analysis fallback.
+- Verification: `wc -l .planning/codebase/*.md` returned 43-55 lines per document, and the secret-pattern grep over `.planning/codebase/*.md` returned no matches.
 
 - Install source: `https://raw.githubusercontent.com/obra/superpowers/refs/heads/main/.codex/INSTALL.md`
 - Expected setup from upstream instructions:

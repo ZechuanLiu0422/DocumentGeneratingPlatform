@@ -1,52 +1,117 @@
-# Integrations
+# External Integrations
 
-## Supabase
+**Analysis Date:** 2026-03-26
 
-- Supabase is the primary external platform for auth and data persistence.
-- Public client configuration comes from `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`; see `.env.example` and `lib/env.ts`.
-- Server and browser clients are created in `lib/supabase/server.ts` and `lib/supabase/browser.ts`.
-- Session refresh and cookie propagation happen in `lib/supabase/middleware.ts`, which is used by `middleware.ts`.
+## APIs & External Services
 
-## Database Tables
+**Backend platform:**
+- Supabase - primary backend for auth, database access, and admin operations
+  - SDK/Client: `@supabase/ssr` and `@supabase/supabase-js`
+  - Evidence: `lib/supabase/server.ts`, `lib/supabase/browser.ts`, `lib/supabase/middleware.ts`, `lib/auth.ts`, `scripts/invite-user.mjs`, `scripts/check-supabase-schema.mjs`
+  - Auth: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, optional `SUPABASE_SERVICE_ROLE_KEY`
 
-- Core tables are created in `supabase/migrations/20260320120000_initial_schema.sql`: `profiles`, `documents`, `drafts`, `contacts`, `common_phrases`, and `usage_events`.
-- Collaborative-writing features are added in `supabase/migrations/20260321110000_collaborative_writing_upgrade.sql`: `writing_rules`, `reference_assets`, and `document_versions`.
-- Planning-specific state is added in `supabase/migrations/20260323150000_outline_planning_upgrade.sql`, especially the `planning` JSON column on `drafts`.
-- RLS is enabled broadly across these tables in the migration files, and route handlers filter rows by `user_id`.
+**AI providers:**
+- Anthropic Claude - document generation provider when `claude` is selected
+  - SDK/Client: `@anthropic-ai/sdk`
+  - Evidence: `lib/official-document-ai.ts`, `lib/providers.ts`
+  - Auth: `CLAUDE_API_KEY`
+- OpenAI - document generation provider when `openai` is selected
+  - SDK/Client: `openai`
+  - Evidence: `lib/official-document-ai.ts`, `lib/providers.ts`
+  - Auth: `OPENAI_API_KEY`
+- Doubao (Volcengine Ark OpenAI-compatible endpoint) - optional provider through OpenAI-compatible client
+  - SDK/Client: `openai`
+  - Evidence: `lib/providers.ts` sets `baseURL` to `https://ark.cn-beijing.volces.com/api/v3`
+  - Auth: `DOUBAO_API_KEY`
+- GLM (Zhipu OpenAI-compatible endpoint) - optional provider through OpenAI-compatible client
+  - SDK/Client: `openai`
+  - Evidence: `lib/providers.ts` sets `baseURL` to `https://open.bigmodel.cn/api/paas/v4`
+  - Auth: `GLM_API_KEY`
 
-## Authentication
+**Document processing libraries:**
+- Local-only DOCX/PDF parsing and generation; these are libraries, not network integrations
+  - Parsing: `lib/file-parser.ts`
+  - Generation: `lib/document-generator.ts`
 
-- User login and logout are handled through Supabase Auth in `app/api/login/route.ts` and `app/api/logout/route.ts`.
-- Mandatory password rotation is enforced through `middleware.ts` plus the UI in `app/change-password/page.tsx`.
-- Route-level auth for API handlers is centralized in `lib/auth.ts` via `requireRouteUser`.
+## Data Storage
 
-## AI Providers
+**Databases:**
+- Supabase Postgres
+  - Connection: `NEXT_PUBLIC_SUPABASE_URL` for app clients, `SUPABASE_SERVICE_ROLE_KEY` for admin scripts
+  - Client: `@supabase/supabase-js` and `@supabase/ssr`
+  - Schema evidence: `supabase/migrations/20260320120000_initial_schema.sql`, `supabase/migrations/20260321110000_collaborative_writing_upgrade.sql`, `supabase/migrations/20260323150000_outline_planning_upgrade.sql`
+  - Core tables: `profiles`, `documents`, `drafts`, `contacts`, `common_phrases`, `usage_events`, `writing_rules`, `reference_assets`, `document_versions`
 
-- Provider discovery and enablement logic live in `lib/providers.ts`.
-- Supported providers are `claude`, `openai`, `doubao`, and `glm`.
-- `claude` uses the Anthropic SDK in `lib/official-document-ai.ts`.
-- `openai`, `doubao`, and `glm` all use the OpenAI-compatible client path in `lib/official-document-ai.ts`, with custom `baseURL` values for `doubao` and `glm`.
-- Provider credentials are environment-driven and never stored in the database according to `README.md`, `.env.example`, and `lib/providers.ts`.
+**File Storage:**
+- Local filesystem only during request processing
+  - Evidence: uploaded files are read from `request.formData()` and parsed in memory in `app/api/upload-reference/route.ts`
+  - Parsed text is stored in Postgres via `reference_assets.content` rather than object storage; see `app/api/reference-assets/route.ts` and `supabase/migrations/20260321110000_collaborative_writing_upgrade.sql`
+  - Supabase Storage is enabled in `supabase/config.toml`, but no app code references storage buckets, uploads, or signed URLs
 
-## File Parsing And Export
+**Caching:**
+- None
+  - No Redis or external cache is configured
+  - Request throttling is process-local memory in `lib/ratelimit.ts`
 
-- Uploaded references are parsed locally in `lib/file-parser.ts` using `mammoth` for `.docx` and `pdfjs-dist` for `.pdf`.
-- Final Word output is generated in-memory by `lib/document-generator.ts` using the `docx` package and JSON templates from `templates/*`.
-- The export endpoint `app/api/generate/route.ts` returns a Base64 payload instead of uploading the file to object storage.
+## Authentication & Identity
 
-## Deployment And Operations
+**Auth Provider:**
+- Supabase Auth
+  - Implementation: SSR cookie-based sessions and middleware enforcement via `lib/supabase/server.ts`, `lib/supabase/middleware.ts`, `middleware.ts`, and `lib/auth.ts`
+  - Signup is disabled in local Supabase config: `supabase/config.toml`
+  - Admin user provisioning uses `supabase.auth.admin.createUser` in `scripts/invite-user.mjs`
+  - New user profile rows are created by a Postgres trigger on `auth.users` in `supabase/migrations/20260320120000_initial_schema.sql`
 
-- Vercel is the intended deployment target per `README.md` and `vercel.json`.
-- `scripts/check-deploy.mjs` validates local env vars and migration presence before deployment.
-- `scripts/check-supabase-schema.mjs` performs runtime checks against the Supabase schema.
+## Monitoring & Observability
 
-## Internal Integration Surfaces
+**Error Tracking:**
+- None
+  - No Sentry, Bugsnag, Honeybadger, or similar SDK is present in `package.json` or source imports
 
-- Collaborative context assembly happens in `lib/collaborative-route-helpers.ts`, which merges stored rules/assets with transient session references.
-- Usage quotas are backed by the `usage_events` table in `lib/quota.ts`.
-- Rate limits are enforced in-memory in `lib/ratelimit.ts`, separate from database-backed daily quotas.
+**Logs:**
+- Application-level structured response helpers plus script stdout/stderr
+  - API request context and error handling live in `lib/api.ts`
+  - Operational checks log to the console in `scripts/check-deploy.mjs`, `scripts/check-supabase-schema.mjs`, and `scripts/invite-user.mjs`
+  - Usage auditing is persisted in the `usage_events` table through `lib/quota.ts`
 
-## Missing Integrations
+## CI/CD & Deployment
 
-- There is no integration with Supabase Storage or any other blob store yet; `README.md` lists storage-backed export history as future work.
-- No external queue, cache, or observability provider is configured in the repository.
+**Hosting:**
+- Vercel
+  - Evidence: `vercel.json`
+  - Route function timeout policy: `app/api/**/*.ts` max duration 60 seconds in `vercel.json`
+
+**CI Pipeline:**
+- Not detected
+  - No `.github/workflows/*`, Buildkite, CircleCI, or similar pipeline config exists in the repo root scan
+
+## Environment Configuration
+
+**Required env vars:**
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- One enabled AI provider pair:
+- `CLAUDE_API_KEY` and `CLAUDE_MODEL`
+- `OPENAI_API_KEY` and `OPENAI_MODEL`
+- `DOUBAO_API_KEY` and `DOUBAO_MODEL`
+- `GLM_API_KEY` and `GLM_MODEL`
+- `SUPABASE_SERVICE_ROLE_KEY` for admin flows and schema checks
+
+**Secrets location:**
+- Local developer secrets live in `.env` and `.env.local` and are referenced by `scripts/check-deploy.mjs`
+- `.env.example` documents the expected keys without values
+- Production/preview deployment secrets are expected in Vercel environments; `scripts/check-deploy.mjs` explicitly calls out Vercel Preview and Production configuration
+
+## Webhooks & Callbacks
+
+**Incoming:**
+- None
+  - No webhook routes or signature verification code are present under `app/api/`
+
+**Outgoing:**
+- AI completion requests to Anthropic, OpenAI, Doubao, and GLM from `lib/official-document-ai.ts`
+- Supabase Auth and PostgREST requests from `lib/supabase/*.ts`, `lib/collaborative-store.ts`, and scripts in `scripts/*.mjs`
+
+---
+
+*Integration audit: 2026-03-26*
