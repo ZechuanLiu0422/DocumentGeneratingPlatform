@@ -11,11 +11,11 @@ export async function POST(request: NextRequest) {
     const { supabase, user } = await requireRouteUser();
     context.userId = user.id;
     const body = versionRestoreSchema.parse(await request.json());
-    const version = await restoreVersionSnapshot(supabase, user.id, body.draftId, body.versionId);
+    const result = await restoreVersionSnapshot(supabase, user.id, body.draftId, body.versionId);
 
     return ok(context, {
       success: true,
-      version,
+      ...result,
     });
   } catch (error) {
     return handleRouteError(error, context);

@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { AppError } from '@/lib/api';
 import type { AnalyzeResult } from '@/lib/official-document-ai';
+import { buildRestoreResponse, buildRestoredSnapshot, mergeRestoredDraft } from '@/lib/version-restore';
 
 export type WritingRuleRecord = {
   id: string;
@@ -238,15 +239,35 @@ export async function restoreVersionSnapshot(supabase: SupabaseClient, userId: s
     throw new AppError(404, '版本不存在或无权访问', 'VERSION_NOT_FOUND');
   }
 
-  const normalizedSections = Array.isArray(data.sections) ? data.sections : [];
+  const currentDraft = await getDraftById(supabase, userId, draftId);
+  const mergedDraft = mergeRestoredDraft(currentDraft, {
+    ...data,
+    sections: Array.isArray(data.sections) ? data.sections : [],
+  } as VersionRecord, new Date().toISOString());
   const { error: updateError } = await supabase
     .from('drafts')
     .update({
-      generated_title: data.title || null,
-      generated_content: data.content || null,
-      sections: normalizedSections,
-      workflow_stage: 'draft',
-      updated_at: new Date().toISOString(),
+      title: mergedDraft.title,
+      recipient: mergedDraft.recipient,
+      content: mergedDraft.content,
+      issuer: mergedDraft.issuer,
+      date: mergedDraft.date,
+      provider: mergedDraft.provider,
+      contact_name: mergedDraft.contact_name,
+      contact_phone: mergedDraft.contact_phone,
+      attachments: mergedDraft.attachments,
+      workflow_stage: mergedDraft.workflow_stage,
+      collected_facts: mergedDraft.collected_facts,
+      missing_fields: mergedDraft.missing_fields,
+      planning: mergedDraft.planning,
+      outline: mergedDraft.outline,
+      sections: mergedDraft.sections,
+      active_rule_ids: mergedDraft.active_rule_ids,
+      active_reference_ids: mergedDraft.active_reference_ids,
+      version_count: mergedDraft.version_count,
+      generated_title: mergedDraft.generated_title,
+      generated_content: mergedDraft.generated_content,
+      updated_at: mergedDraft.updated_at,
     })
     .eq('id', draftId)
     .eq('user_id', userId);
@@ -255,20 +276,27 @@ export async function restoreVersionSnapshot(supabase: SupabaseClient, userId: s
     throw updateError;
   }
 
+  const restoredSnapshot = buildRestoredSnapshot(data as VersionRecord);
+
   await createVersionSnapshot(supabase, {
     userId,
     draftId,
-    stage: 'restored',
-    title: data.title,
-    content: data.content,
-    sections: normalizedSections,
-    changeSummary: `从历史版本恢复：${data.change_summary || data.stage}`,
+    stage: restoredSnapshot.stage,
+    title: restoredSnapshot.title,
+    content: restoredSnapshot.content,
+    sections: restoredSnapshot.sections,
+    changeSummary: restoredSnapshot.change_summary,
   });
 
-  return {
-    ...data,
-    sections: normalizedSections,
-  } as VersionRecord;
+  const refreshedDraft = await getDraftById(supabase, userId, draftId);
+
+  return buildRestoreResponse(
+    refreshedDraft,
+    {
+      ...data,
+      sections: Array.isArray(data.sections) ? data.sections : [],
+    } as VersionRecord
+  );
 }
 
 export async function fetchWritingRules(

@@ -1,7 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { DraftRecord, VersionRecord } from '../../lib/collaborative-store.ts';
 import { buildRestoreResponse, mergeRestoredDraft } from '../../lib/version-restore.ts';
+
+const currentFile = fileURLToPath(import.meta.url);
+const currentDir = path.dirname(currentFile);
 
 function createDraft(): DraftRecord {
   return {
@@ -148,4 +154,15 @@ test('buildRestoreResponse keeps restore history append-only and version counts 
   assert.equal(response.restoredSnapshot.title, '历史版本标题');
   assert.equal(response.restoredSnapshot.content, '历史版本正文');
   assert.match(response.restoredSnapshot.change_summary ?? '', /从历史版本恢复/);
+});
+
+test('restore store and route return the authoritative draft snapshot contract', () => {
+  const storeSource = readFileSync(path.resolve(currentDir, '../../lib/collaborative-store.ts'), 'utf8');
+  const routeSource = readFileSync(path.resolve(currentDir, '../../app/api/ai/versions/restore/route.ts'), 'utf8');
+
+  assert.match(storeSource, /return buildRestoreResponse\(/);
+  assert.match(storeSource, /const refreshedDraft = await getDraftById/);
+  assert.match(routeSource, /success:\s*true/);
+  assert.match(routeSource, /\.\.\.result/);
+  assert.doesNotMatch(routeSource, /version,\s*$/m);
 });
