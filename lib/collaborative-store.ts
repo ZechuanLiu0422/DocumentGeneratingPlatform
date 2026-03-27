@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { AppError } from '@/lib/api';
 import type { AnalyzeResult } from '@/lib/official-document-ai';
 import { buildRestoreResponse, buildRestoredSnapshot, mergeRestoredDraft } from '@/lib/version-restore';
+import type { ReviewState, SectionProvenance, TrustedDraftSection } from '@/lib/validation';
 
 export type WritingRuleRecord = {
   id: string;
@@ -54,11 +55,7 @@ export type PlanningOptionRecord = {
   sections: PlanningSectionRecord[];
 };
 
-export type DraftSectionRecord = {
-  id: string;
-  heading: string;
-  body: string;
-};
+export type DraftSectionRecord = TrustedDraftSection;
 
 export type DraftRecord = {
   id: string;
@@ -96,6 +93,7 @@ export type DraftRecord = {
   version_count: number;
   generated_title: string | null;
   generated_content: string | null;
+  review_state?: ReviewState | null;
   updated_at?: string;
 };
 
@@ -107,6 +105,7 @@ export type VersionRecord = {
   title: string | null;
   content: string | null;
   sections: DraftSectionRecord[];
+  review_state?: ReviewState | null;
   change_summary: string | null;
   created_at: string;
 };
@@ -122,7 +121,83 @@ export function compileSectionsToContent(sections: DraftSectionRecord[]) {
     .join('\n\n');
 }
 
-function normalizeDraftRecord(row: any): DraftRecord {
+function normalizeSectionProvenance(value: any): SectionProvenance | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const rawSources = Array.isArray(value.sources) ? value.sources : [];
+  const sources = rawSources
+    .filter((source) => source && typeof source === 'object')
+    .map((source) => ({
+      sourceType:
+        source.sourceType === 'reference_asset' ||
+        source.sourceType === 'session_reference' ||
+        source.sourceType === 'writing_rule'
+          ? source.sourceType
+          : 'reference_asset',
+      sourceId: typeof source.sourceId === 'string' ? source.sourceId : '',
+      label: typeof source.label === 'string' ? source.label : '',
+      excerpt: typeof source.excerpt === 'string' ? source.excerpt : '',
+      reason: typeof source.reason === 'string' ? source.reason : '',
+    }))
+    .filter((source) => source.label && source.excerpt);
+
+  if (!sources.length) {
+    return null;
+  }
+
+  return {
+    summary: typeof value.summary === 'string' ? value.summary : '',
+    sources,
+  };
+}
+
+export function normalizeDraftSectionRecord(row: any): DraftSectionRecord {
+  return {
+    id: typeof row?.id === 'string' ? row.id : '',
+    heading: typeof row?.heading === 'string' ? row.heading : '',
+    body: typeof row?.body === 'string' ? row.body : '',
+    provenance: normalizeSectionProvenance(row?.provenance),
+  };
+}
+
+export function normalizeReviewState(row: any): ReviewState | null {
+  if (!row || typeof row !== 'object') {
+    return null;
+  }
+
+  const checks = Array.isArray(row.checks)
+    ? row.checks
+        .filter((check) => check && typeof check === 'object')
+        .map((check) => ({
+          code: typeof check.code === 'string' ? check.code : '',
+          status: check.status === 'pass' || check.status === 'warning' || check.status === 'fail' ? check.status : 'warning',
+          message: typeof check.message === 'string' ? check.message : '',
+          fixPrompt: typeof check.fixPrompt === 'string' ? check.fixPrompt : '',
+        }))
+        .filter((check) => check.code && check.message)
+    : [];
+
+  if (
+    typeof row.content_hash !== 'string' ||
+    typeof row.ran_at !== 'string' ||
+    (row.doc_type !== 'notice' && row.doc_type !== 'letter' && row.doc_type !== 'request' && row.doc_type !== 'report') ||
+    (row.status !== 'pass' && row.status !== 'warning' && row.status !== 'fail')
+  ) {
+    return null;
+  }
+
+  return {
+    content_hash: row.content_hash,
+    doc_type: row.doc_type,
+    status: row.status,
+    ran_at: row.ran_at,
+    checks,
+  };
+}
+
+export function normalizeDraftRecord(row: any): DraftRecord {
   return {
     ...row,
     attachments: Array.isArray(row.attachments) ? row.attachments : [],
@@ -130,20 +205,29 @@ function normalizeDraftRecord(row: any): DraftRecord {
     missing_fields: Array.isArray(row.missing_fields) ? row.missing_fields : [],
     planning: row.planning && typeof row.planning === 'object' ? row.planning : null,
     outline: row.outline && typeof row.outline === 'object' ? row.outline : null,
-    sections: Array.isArray(row.sections) ? row.sections : [],
+    sections: Array.isArray(row.sections) ? row.sections.map(normalizeDraftSectionRecord) : [],
     active_rule_ids: Array.isArray(row.active_rule_ids) ? row.active_rule_ids : [],
     active_reference_ids: Array.isArray(row.active_reference_ids) ? row.active_reference_ids : [],
     version_count: typeof row.version_count === 'number' ? row.version_count : 0,
     generated_title: row.generated_title || null,
     generated_content: row.generated_content || null,
+    review_state: normalizeReviewState(row.review_state),
   };
+}
+
+export function normalizeVersionRecord(row: any): VersionRecord {
+  return {
+    ...row,
+    sections: Array.isArray(row.sections) ? row.sections.map(normalizeDraftSectionRecord) : [],
+    review_state: normalizeReviewState(row.review_state),
+  } as VersionRecord;
 }
 
 export async function getDraftById(supabase: SupabaseClient, userId: string, draftId: string) {
   const { data, error } = await supabase
     .from('drafts')
     .select(
-      'id, user_id, doc_type, title, recipient, content, issuer, date, provider, contact_name, contact_phone, attachments, workflow_stage, collected_facts, missing_fields, planning, outline, sections, active_rule_ids, active_reference_ids, version_count, generated_title, generated_content, updated_at'
+      'id, user_id, doc_type, title, recipient, content, issuer, date, provider, contact_name, contact_phone, attachments, workflow_stage, collected_facts, missing_fields, planning, outline, sections, active_rule_ids, active_reference_ids, version_count, generated_title, generated_content, review_state, updated_at'
     )
     .eq('id', draftId)
     .eq('user_id', userId)
@@ -159,7 +243,7 @@ export async function getDraftById(supabase: SupabaseClient, userId: string, dra
 export async function listVersionsForDraft(supabase: SupabaseClient, userId: string, draftId: string) {
   const { data, error } = await supabase
     .from('document_versions')
-    .select('id, draft_id, user_id, stage, title, content, sections, change_summary, created_at')
+    .select('id, draft_id, user_id, stage, title, content, sections, review_state, change_summary, created_at')
     .eq('user_id', userId)
     .eq('draft_id', draftId)
     .order('created_at', { ascending: false })
@@ -169,10 +253,7 @@ export async function listVersionsForDraft(supabase: SupabaseClient, userId: str
     throw error;
   }
 
-  return (data || []).map((row) => ({
-    ...row,
-    sections: Array.isArray(row.sections) ? row.sections : [],
-  })) as VersionRecord[];
+  return (data || []).map((row) => normalizeVersionRecord(row));
 }
 
 export async function createVersionSnapshot(
@@ -184,6 +265,7 @@ export async function createVersionSnapshot(
     title?: string | null;
     content?: string | null;
     sections?: DraftSectionRecord[];
+    reviewState?: ReviewState | null;
     changeSummary?: string | null;
   }
 ) {
@@ -194,6 +276,7 @@ export async function createVersionSnapshot(
     title: payload.title || null,
     content: payload.content || null,
     sections: payload.sections || [],
+    review_state: payload.reviewState || null,
     change_summary: payload.changeSummary || null,
   });
 
@@ -229,7 +312,7 @@ async function countVersions(supabase: SupabaseClient, userId: string, draftId: 
 export async function restoreVersionSnapshot(supabase: SupabaseClient, userId: string, draftId: string, versionId: string) {
   const { data, error } = await supabase
     .from('document_versions')
-    .select('id, draft_id, user_id, stage, title, content, sections, change_summary, created_at')
+    .select('id, draft_id, user_id, stage, title, content, sections, review_state, change_summary, created_at')
     .eq('id', versionId)
     .eq('draft_id', draftId)
     .eq('user_id', userId)
@@ -240,10 +323,7 @@ export async function restoreVersionSnapshot(supabase: SupabaseClient, userId: s
   }
 
   const currentDraft = await getDraftById(supabase, userId, draftId);
-  const mergedDraft = mergeRestoredDraft(currentDraft, {
-    ...data,
-    sections: Array.isArray(data.sections) ? data.sections : [],
-  } as VersionRecord, new Date().toISOString());
+  const mergedDraft = mergeRestoredDraft(currentDraft, normalizeVersionRecord(data), new Date().toISOString());
   const { error: updateError } = await supabase
     .from('drafts')
     .update({
@@ -267,6 +347,7 @@ export async function restoreVersionSnapshot(supabase: SupabaseClient, userId: s
       version_count: mergedDraft.version_count,
       generated_title: mergedDraft.generated_title,
       generated_content: mergedDraft.generated_content,
+      review_state: mergedDraft.review_state || null,
       updated_at: mergedDraft.updated_at,
     })
     .eq('id', draftId)
@@ -276,7 +357,8 @@ export async function restoreVersionSnapshot(supabase: SupabaseClient, userId: s
     throw updateError;
   }
 
-  const restoredSnapshot = buildRestoredSnapshot(data as VersionRecord);
+  const normalizedVersion = normalizeVersionRecord(data);
+  const restoredSnapshot = buildRestoredSnapshot(normalizedVersion);
 
   await createVersionSnapshot(supabase, {
     userId,
@@ -285,6 +367,7 @@ export async function restoreVersionSnapshot(supabase: SupabaseClient, userId: s
     title: restoredSnapshot.title,
     content: restoredSnapshot.content,
     sections: restoredSnapshot.sections,
+    reviewState: restoredSnapshot.review_state || null,
     changeSummary: restoredSnapshot.change_summary,
   });
 
@@ -292,10 +375,7 @@ export async function restoreVersionSnapshot(supabase: SupabaseClient, userId: s
 
   return buildRestoreResponse(
     refreshedDraft,
-    {
-      ...data,
-      sections: Array.isArray(data.sections) ? data.sections : [],
-    } as VersionRecord
+    normalizedVersion
   );
 }
 

@@ -1,5 +1,14 @@
 # TODO
 
+- [x] Begin Phase 3 execution and complete Wave 1 plan `03-01`
+- [x] Verify Wave 1 outputs, write `03-01-SUMMARY.md`, and commit atomically
+- [ ] Execute Phase 03 Plan 02 and commit grounded provenance work atomically
+- [ ] Execute Phase 03 Plan 03 and commit review freshness/export gate work atomically
+- [ ] Verify Wave 2 outputs, write `03-02-SUMMARY.md` and `03-03-SUMMARY.md`
+- [ ] Execute Phase 03 Plan 04 and commit preview-first compare/accept work atomically
+- [ ] Run Phase 3 validation, update planning artifacts, and commit execution results
+- [ ] Record Phase 3 execution review notes
+
 - [x] Create Phase 3 planning checklist and task breakdown for grounded drafting/review trust
 - [x] Generate executable `03-01` through `03-04` plan files with wave ordering, requirement coverage, and brownfield-safe file ownership
 - [x] Write `03-VALIDATION.md` with route-contract, browser-proof, and provider-free core safety verification

@@ -67,11 +67,99 @@ export const draftSectionSchema = z.object({
   body: z.string().trim().min(1).max(4000),
 });
 
+export const sectionSourceRefSchema = z.object({
+  sourceType: z.enum(['reference_asset', 'session_reference', 'writing_rule']),
+  sourceId: z.string().trim().max(120).optional().default(''),
+  label: z.string().trim().min(1).max(120),
+  excerpt: z.string().trim().min(1).max(800),
+  reason: z.string().trim().max(240).optional().default(''),
+});
+
+export const sectionProvenanceSchema = z.object({
+  summary: z.string().trim().max(240).optional().default(''),
+  sources: z.array(sectionSourceRefSchema).min(1).max(4),
+});
+
+export const trustedDraftSectionSchema = draftSectionSchema.extend({
+  provenance: sectionProvenanceSchema.nullable().optional().default(null),
+});
+
 export const reviewCheckSchema = z.object({
   code: z.string().trim().min(1).max(80),
   status: z.enum(['pass', 'warning', 'fail']),
   message: z.string().trim().min(1).max(400),
   fixPrompt: z.string().trim().max(500).optional().default(''),
+});
+
+export const reviewStateSchema = z.object({
+  content_hash: z.string().trim().min(1).max(160),
+  doc_type: docTypeSchema,
+  status: z.enum(['pass', 'warning', 'fail']),
+  ran_at: z.string().datetime({ offset: true }),
+  checks: z.array(reviewCheckSchema).max(20).default([]),
+});
+
+export const changeCandidateTargetTypeSchema = z.enum(['selection', 'section', 'full']);
+export const changeCandidateActionSchema = z.enum(['regenerate', 'revise', 'restore']);
+
+export const changeCandidateSnapshotSchema = z.object({
+  title: z.string().trim().max(200).nullable().optional().default(null),
+  content: z.string().trim().max(20000).nullable().optional().default(null),
+  sections: z.array(trustedDraftSectionSchema).max(12).default([]),
+  reviewState: reviewStateSchema.nullable().optional().default(null),
+});
+
+const changeCandidateSectionIdsSchema = z.array(z.string().trim().min(1).max(80)).max(12).default([]);
+
+export const changeCandidatePreviewSchema = z.object({
+  candidateId: z.string().uuid(),
+  action: changeCandidateActionSchema,
+  targetType: changeCandidateTargetTypeSchema,
+  targetSectionIds: changeCandidateSectionIdsSchema,
+  changedSectionIds: changeCandidateSectionIdsSchema,
+  unchangedSectionIds: changeCandidateSectionIdsSchema,
+  before: changeCandidateSnapshotSchema,
+  after: changeCandidateSnapshotSchema,
+  diffSummary: z.string().trim().max(500).optional().default(''),
+});
+
+export const changeCandidateAcceptRequestSchema = z
+  .object({
+    draftId: z.string().uuid(),
+    candidateId: z.string().uuid(),
+    action: changeCandidateActionSchema,
+    targetType: changeCandidateTargetTypeSchema,
+    targetSectionIds: changeCandidateSectionIdsSchema,
+  })
+  .superRefine((value, ctx) => {
+    if (value.targetType === 'section' && value.targetSectionIds.length !== 1) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['targetSectionIds'],
+        message: '段落级候选变更必须且只能指定一个段落',
+      });
+    }
+
+    if (value.targetType === 'selection' && value.targetSectionIds.length < 1) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['targetSectionIds'],
+        message: '片段级候选变更必须绑定至少一个段落',
+      });
+    }
+
+    if (value.targetType === 'full' && value.targetSectionIds.length > 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['targetSectionIds'],
+        message: '整稿候选变更不能声明段落范围',
+      });
+    }
+  });
+
+export const changeCandidateRejectRequestSchema = z.object({
+  draftId: z.string().uuid(),
+  candidateId: z.string().uuid(),
 });
 
 export const loginSchema = z.object({
@@ -320,3 +408,12 @@ export const versionRestoreSchema = z.object({
   draftId: z.string().uuid(),
   versionId: z.string().uuid(),
 });
+
+export type SectionSourceRef = z.infer<typeof sectionSourceRefSchema>;
+export type SectionProvenance = z.infer<typeof sectionProvenanceSchema>;
+export type TrustedDraftSection = z.infer<typeof trustedDraftSectionSchema>;
+export type ReviewState = z.infer<typeof reviewStateSchema>;
+export type ChangeCandidateTargetType = z.infer<typeof changeCandidateTargetTypeSchema>;
+export type ChangeCandidateAction = z.infer<typeof changeCandidateActionSchema>;
+export type ChangeCandidateSnapshot = z.infer<typeof changeCandidateSnapshotSchema>;
+export type ChangeCandidatePreview = z.infer<typeof changeCandidatePreviewSchema>;

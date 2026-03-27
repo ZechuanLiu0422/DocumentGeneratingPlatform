@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Ready to plan
+status: Executing Phase 03
 stopped_at: Completed Phase 02 execution
-last_updated: "2026-03-26T17:36:58Z"
+last_updated: "2026-03-27T07:54:44.875Z"
 progress:
   total_phases: 5
   completed_phases: 2
-  total_plans: 8
+  total_plans: 12
   completed_plans: 8
 ---
 
@@ -23,8 +23,8 @@ See: .planning/PROJECT.md (updated 2026-03-26)
 
 ## Current Position
 
-Phase: 02 (verification-and-telemetry-baseline) — COMPLETE
-Plan: 4 of 4 complete
+Phase: 03 (grounded-drafting-and-review-trust) — EXECUTING
+Plan: 2 of 4
 
 ## Performance Metrics
 
@@ -73,12 +73,20 @@ Recent decisions affecting current work:
 
 ### Pending Todos
 
-- Phase 3 planning has not started yet.
+- Execute Wave 2 plans `03-02` and `03-03` sequentially because both modify `lib/official-document-workflow.ts`, `app/generate/page.tsx`, and related trust route boundaries.
+- Preserve the new Phase 3 trust contracts and JSONB storage when grounding draft provenance, review freshness, and preview-first compare flows.
 
 ### Blockers/Concerns
 
 - Phase 3 should preserve the now-verified local seed/browser path so grounded drafting changes do not regress the generate workspace.
 - Browser smoke remains environment-sensitive because local verification depends on Docker-backed Supabase plus a bindable local port.
+
+## Latest Completed Work
+
+- Completed Phase 03 Plan 01 on 2026-03-27.
+- Added Phase 3 contract scripts, trust fixtures, and Phase 2-derived route helper wrappers under `tests/phase-03/contracts/`.
+- Extended validation, draft/version normalization, and restore helpers to carry optional provenance plus `review_state jsonb` contracts.
+- Added `supabase/migrations/20260327173000_phase_03_review_state_jsonb.sql` for explicit review freshness storage on `drafts` and `document_versions`.
 
 ## Session Continuity
 
