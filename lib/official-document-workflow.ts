@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { AppError } from '@/lib/api';
 import { type DraftSectionRecord, type OutlineSectionRecord, type PlanningOptionRecord, type PlanningSectionRecord, type ReferenceAssetRecord, type WritingRuleRecord, compileSectionsToContent } from '@/lib/collaborative-store';
@@ -54,6 +55,13 @@ type ReviseResult = {
 };
 
 type ReviewCheck = z.infer<typeof reviewCheckSchema>;
+type ReviewState = {
+  content_hash: string;
+  doc_type: DocType;
+  status: 'pass' | 'warning' | 'fail';
+  ran_at: string;
+  checks: ReviewCheck[];
+};
 type StructuredCallMode = 'fallback' | 'throw';
 type DraftSectionBrief = {
   id: string;
@@ -581,6 +589,22 @@ function normalizeDraftSections(sections: DraftSectionRecord[], outlineSections:
 
 function normalizeCompareText(text: string) {
   return text.replace(/\s+/g, '').replace(/[，。；：、“”‘’（）()《》【】\-]/g, '').trim();
+}
+
+function matchesAny(text: string, patterns: string[]) {
+  return patterns.some((pattern) => text.includes(pattern));
+}
+
+function computeAggregateReviewStatus(checks: ReviewCheck[]): ReviewState['status'] {
+  if (checks.some((check) => check.status === 'fail')) {
+    return 'fail';
+  }
+
+  if (checks.some((check) => check.status === 'warning')) {
+    return 'warning';
+  }
+
+  return 'pass';
 }
 
 function buildDraftSectionTask(docType: DocType, section: OutlineSectionRecord, index: number, total: number) {
@@ -1581,14 +1605,92 @@ ${formatReferences(params.references || [])}
   } satisfies ReviseResult;
 }
 
-function buildDeterministicChecks(params: {
+export function buildDeterministicReviewChecks(params: {
   docType: DocType;
+  title?: string;
   content: string;
+  sections?: DraftSectionRecord[];
   recipient: string;
   attachments?: string[];
 }) {
   const checks: ReviewCheck[] = [];
+  const normalizedContent = normalizeCompareText(params.content || compileSectionsToContent(params.sections || []));
   const expectedEnding = DOC_TYPE_CONFIG[params.docType].requiredEnding;
+
+  if (params.docType === 'notice') {
+    checks.push(
+      matchesAny(normalizedContent, ['请', '落实', '执行', '完成', '报送', '整改', '组织开展', '工作要求'])
+        ? {
+            code: 'notice_action_required',
+            status: 'pass',
+            message: '通知正文包含明确执行动作或工作要求。',
+            fixPrompt: '',
+          }
+        : {
+            code: 'notice_action_required',
+            status: 'fail',
+            message: '通知正文缺少明确执行动作或工作要求。',
+            fixPrompt: '请补充明确的落实动作、时间要求或报送要求，避免通知只停留在背景说明。',
+          }
+    );
+  }
+
+  if (params.docType === 'letter') {
+    checks.push(
+      matchesAny(normalizedContent, ['支持', '配合', '协作', '协助', '商洽', '函达'])
+        ? {
+            code: 'letter_cooperation_framing',
+            status: 'pass',
+            message: '函件正文保持了商洽或协作语气。',
+            fixPrompt: '',
+          }
+        : {
+            code: 'letter_cooperation_framing',
+            status: 'warning',
+            message: '函件正文缺少明显的商洽或协作表述，语气可能偏硬。',
+            fixPrompt: '请补充“请予支持”“请予配合”或其他商洽协作表述，保持函件语气。',
+          }
+    );
+  }
+
+  if (params.docType === 'request') {
+    checks.push(
+      matchesAny(normalizedContent, ['请批准', '请批示', '请审批', '请审定', '妥否请批示'])
+        ? {
+            code: 'request_approval_focus',
+            status: 'pass',
+            message: '请示正文聚焦明确审批或批示请求。',
+            fixPrompt: '',
+          }
+        : {
+            code: 'request_approval_focus',
+            status: 'fail',
+            message: '请示正文没有形成明确审批请求。',
+            fixPrompt: '请在结尾明确提出拟请批准、请批示或请审定的具体事项。',
+          }
+    );
+  }
+
+  if (params.docType === 'report') {
+    const hasProgress = matchesAny(normalizedContent, ['进展', '成效', '完成', '推进', '落实']);
+    const hasIssues = matchesAny(normalizedContent, ['问题', '困难', '风险', '不足']);
+    const hasNextSteps = matchesAny(normalizedContent, ['下一步', '后续', '下一阶段', '持续整改', '继续推进']);
+    checks.push(
+      hasProgress && hasIssues && hasNextSteps
+        ? {
+            code: 'report_progress_coverage',
+            status: 'pass',
+            message: '报告正文已覆盖进展、问题和下一步安排。',
+            fixPrompt: '',
+          }
+        : {
+            code: 'report_progress_coverage',
+            status: 'warning',
+            message: '报告正文应同时覆盖进展、问题和下一步安排。',
+            fixPrompt: '请补足当前进展、存在问题和下一步安排三部分，避免报告只写单一维度。',
+          }
+    );
+  }
 
   checks.push(
     params.content.includes(expectedEnding)
@@ -1634,6 +1736,45 @@ function buildDeterministicChecks(params: {
   }
 
   return checks;
+}
+
+export function computeReviewContentHash(params: {
+  title?: string;
+  content?: string;
+  sections?: DraftSectionRecord[];
+}) {
+  const payload = {
+    title: (params.title || '').trim(),
+    content: (params.content || compileSectionsToContent(params.sections || [])).trim(),
+    sections: (params.sections || []).map((section) => ({
+      id: section.id,
+      heading: section.heading.trim(),
+      body: section.body.trim(),
+    })),
+  };
+
+  return `sha256:${createHash('sha256').update(JSON.stringify(payload)).digest('hex')}`;
+}
+
+export function buildPersistedReviewState(params: {
+  docType: DocType;
+  title?: string;
+  content?: string;
+  sections?: DraftSectionRecord[];
+  checks: ReviewCheck[];
+  ranAt?: string;
+}) {
+  return {
+    content_hash: computeReviewContentHash({
+      title: params.title,
+      content: params.content,
+      sections: params.sections,
+    }),
+    doc_type: params.docType,
+    status: computeAggregateReviewStatus(params.checks),
+    ran_at: params.ranAt || new Date().toISOString(),
+    checks: params.checks.slice(0, 20),
+  } satisfies ReviewState;
 }
 
 export async function reviewWorkflow(params: {
@@ -1685,9 +1826,11 @@ ${formatReferences(params.references || [])}
   ]
 }`;
 
-  const deterministicChecks = buildDeterministicChecks({
+  const deterministicChecks = buildDeterministicReviewChecks({
     docType: params.docType,
+    title: params.title,
     content: params.content,
+    sections: params.sections,
     recipient: params.recipient,
     attachments: params.attachments,
   });

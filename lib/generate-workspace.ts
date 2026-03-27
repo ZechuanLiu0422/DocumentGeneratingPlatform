@@ -40,6 +40,19 @@ export type DraftSection = {
   } | null;
 };
 
+export type ReviewState = {
+  content_hash: string;
+  doc_type: 'notice' | 'letter' | 'request' | 'report';
+  status: 'pass' | 'warning' | 'fail';
+  ran_at: string;
+  checks: Array<{
+    code: string;
+    status: 'pass' | 'warning' | 'fail';
+    message: string;
+    fixPrompt: string;
+  }>;
+};
+
 export type DraftSnapshot = {
   id: string;
   doc_type: 'notice' | 'letter' | 'request' | 'report';
@@ -75,6 +88,7 @@ export type DraftSnapshot = {
   versionCount: number;
   generatedTitle: string;
   generatedContent: string;
+  reviewState?: ReviewState | null;
 };
 
 export type DraftSaveRequest = {
@@ -122,6 +136,7 @@ export type HydratedDraftView = {
   outlineSections: OutlineSection[];
   outlineRisks: string[];
   sections: DraftSection[];
+  reviewState: ReviewState | null;
 };
 
 function mapStageToStep(stage?: WorkflowStage): WorkflowStage {
@@ -197,5 +212,6 @@ export function deriveHydratedDraftView(draft: DraftSnapshot): HydratedDraftView
     outlineSections: draft.outline?.sections || [],
     outlineRisks: draft.outline?.risks || [],
     sections: draft.sections || [],
+    reviewState: draft.reviewState || null,
   };
 }

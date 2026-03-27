@@ -11,7 +11,6 @@ const projectRoot = path.resolve(helperDir, '../../..');
 const routeMockRegistry = Symbol.for('phase-02.route-mocks');
 
 const nextServerUrl = pathToFileURL(path.join(projectRoot, 'node_modules/next/server.js')).href;
-const validationUrl = pathToFileURL(path.join(projectRoot, 'lib/validation.ts')).href;
 
 function getRouteMockStore() {
   const globalStore = globalThis as typeof globalThis & {
@@ -37,61 +36,121 @@ function createMockModuleUrl(key: string, namedExports: ModuleExports) {
   return `data:text/javascript;base64,${Buffer.from(exportLines).toString('base64')}`;
 }
 
-function rewriteImportSpecifiers(
-  source: string,
+function createMergedMockModuleUrl(key: string, baseImportUrl: string | null, namedExports: ModuleExports) {
+  const store = getRouteMockStore();
+  const cacheKey = `${key}:${Date.now()}:${Math.random().toString(16).slice(2)}`;
+  store[cacheKey] = namedExports;
+
+  const lines = [
+    baseImportUrl ? `export * from '${baseImportUrl}';` : '',
+    ...Object.keys(namedExports).map(
+      (name) =>
+        `export const ${name} = globalThis[Symbol.for('phase-02.route-mocks')][${JSON.stringify(cacheKey)}][${JSON.stringify(name)}];`
+    ),
+  ].filter(Boolean);
+
+  return `data:text/javascript;base64,${Buffer.from(lines.join('\n')).toString('base64')}`;
+}
+
+function resolveModulePath(basePath: string) {
+  const candidates = [
+    basePath,
+    `${basePath}.ts`,
+    `${basePath}.js`,
+    path.join(basePath, 'index.ts'),
+    path.join(basePath, 'index.js'),
+  ];
+
+  for (const candidate of candidates) {
+    try {
+      return readFileSync(candidate, 'utf8') && candidate;
+    } catch {}
+  }
+
+  throw new Error(`Unable to resolve module path for ${basePath}`);
+}
+
+function createTempModuleFromPath(
+  sourcePath: string,
   overrides: Record<string, ModuleExports>,
   tempDir: string,
   tempModuleCache: Map<string, string>
 ) {
+  if (tempModuleCache.has(sourcePath)) {
+    return tempModuleCache.get(sourcePath)!;
+  }
+
+  const source = readFileSync(sourcePath, 'utf8');
+  const tempFile = path.join(
+    tempDir,
+    `${tempModuleCache.size}-${path.basename(sourcePath).replace(/\.[^.]+$/, '')}.ts`
+  );
+
+  tempModuleCache.set(sourcePath, pathToFileURL(tempFile).href);
+
+  const rewrittenSource = rewriteImportSpecifiers(
+    source,
+    overrides,
+    tempDir,
+    tempModuleCache,
+    sourcePath
+  );
+
+  writeFileSync(tempFile, rewrittenSource, 'utf8');
+  return tempModuleCache.get(sourcePath)!;
+}
+
+function resolveImportUrl(
+  specifier: string,
+  sourcePath: string,
+  overrides: Record<string, ModuleExports>,
+  tempDir: string,
+  tempModuleCache: Map<string, string>,
+  allowOverride: boolean
+) {
+  if (allowOverride && overrides[specifier]) {
+    return createMockModuleUrl(specifier, overrides[specifier]);
+  }
+
+  if (specifier === 'next/server' || specifier === 'next/server.js') {
+    return nextServerUrl;
+  }
+
+  if (specifier.startsWith('@/')) {
+    const modulePath = resolveModulePath(path.join(projectRoot, specifier.slice(2)));
+    return createTempModuleFromPath(modulePath, overrides, tempDir, tempModuleCache);
+  }
+
+  if (specifier.startsWith('./') || specifier.startsWith('../')) {
+    const modulePath = resolveModulePath(path.resolve(path.dirname(sourcePath), specifier));
+    return createTempModuleFromPath(modulePath, overrides, tempDir, tempModuleCache);
+  }
+
+  return specifier;
+}
+
+function rewriteImportSpecifiers(
+  source: string,
+  overrides: Record<string, ModuleExports>,
+  tempDir: string,
+  tempModuleCache: Map<string, string>,
+  sourcePath: string
+) {
   return source.replace(/from\s+['"]([^'"]+)['"]/g, (_match, specifier: string) => {
-    if (overrides[specifier]) {
-      return `from '${createMockModuleUrl(specifier, overrides[specifier])}'`;
-    }
-
-    if (specifier === 'next/server') {
-      return `from '${nextServerUrl}'`;
-    }
-
-    if (specifier === '@/lib/validation') {
-      return `from '${validationUrl}'`;
-    }
-
-    if (specifier === '@/lib/api') {
-      if (!tempModuleCache.has(specifier)) {
-        const apiSource = readFileSync(path.join(projectRoot, 'lib/api.ts'), 'utf8').replaceAll(
-          "from 'next/server'",
-          `from '${nextServerUrl}'`
-        );
-        const tempFile = path.join(tempDir, 'lib-api.ts');
-        writeFileSync(tempFile, apiSource, 'utf8');
-        tempModuleCache.set(specifier, pathToFileURL(tempFile).href);
-      }
-
-      return `from '${tempModuleCache.get(specifier)}'`;
-    }
-
-    if (specifier.startsWith('@/')) {
-      const modulePath = path.join(projectRoot, `${specifier.slice(2)}.ts`);
-      return `from '${pathToFileURL(modulePath).href}'`;
-    }
-
-    return `from '${specifier}'`;
+    return `from '${resolveImportUrl(specifier, sourcePath, overrides, tempDir, tempModuleCache, true)}'`;
   });
 }
 
 function buildProjectImportUrl(relativeModulePath: string, overrides: Record<string, ModuleExports>) {
   const moduleUrl = new URL(relativeModulePath, import.meta.url);
-  const source = readFileSync(fileURLToPath(moduleUrl), 'utf8');
   const tempRoot = path.join(projectRoot, '.tmp');
   mkdirSync(tempRoot, { recursive: true });
   const tempDir = mkdtempSync(path.join(tempRoot, 'phase-02-route-'));
   const tempModuleCache = new Map<string, string>();
-  const rewrittenSource = rewriteImportSpecifiers(source, overrides, tempDir, tempModuleCache);
-  const tempFile = path.join(tempDir, `${path.basename(fileURLToPath(moduleUrl), '.ts')}.ts`);
-  writeFileSync(tempFile, rewrittenSource, 'utf8');
+  const importUrl = createTempModuleFromPath(fileURLToPath(moduleUrl), overrides, tempDir, tempModuleCache);
 
   return {
-    importUrl: pathToFileURL(tempFile).href,
+    importUrl,
     cleanup: () => rmSync(tempDir, { recursive: true, force: true }),
   };
 }

@@ -470,6 +470,7 @@ export async function saveDraftState(
     version_count: payload.workflow.version_count ?? 0,
     generated_title: payload.workflow.generated_title || null,
     generated_content: payload.workflow.generated_content || null,
+    review_state: payload.workflow.review_state || null,
     updated_at: new Date().toISOString(),
   };
 
@@ -480,7 +481,7 @@ export async function saveDraftState(
       .eq('id', payload.draftId)
       .eq('user_id', payload.userId)
       .select(
-        'id, user_id, doc_type, title, recipient, content, issuer, date, provider, contact_name, contact_phone, attachments, workflow_stage, collected_facts, missing_fields, planning, outline, sections, active_rule_ids, active_reference_ids, version_count, generated_title, generated_content, updated_at'
+        'id, user_id, doc_type, title, recipient, content, issuer, date, provider, contact_name, contact_phone, attachments, workflow_stage, collected_facts, missing_fields, planning, outline, sections, active_rule_ids, active_reference_ids, version_count, generated_title, generated_content, review_state, updated_at'
       )
       .single();
 
@@ -495,7 +496,7 @@ export async function saveDraftState(
     .from('drafts')
     .insert(draftPayload)
     .select(
-      'id, user_id, doc_type, title, recipient, content, issuer, date, provider, contact_name, contact_phone, attachments, workflow_stage, collected_facts, missing_fields, planning, outline, sections, active_rule_ids, active_reference_ids, version_count, generated_title, generated_content, updated_at'
+      'id, user_id, doc_type, title, recipient, content, issuer, date, provider, contact_name, contact_phone, attachments, workflow_stage, collected_facts, missing_fields, planning, outline, sections, active_rule_ids, active_reference_ids, version_count, generated_title, generated_content, review_state, updated_at'
     )
     .single();
 

@@ -36,6 +36,7 @@ export type DraftRow = {
   version_count: number;
   generated_title: string | null;
   generated_content: string | null;
+  review_state?: Record<string, unknown> | null;
   updated_at?: string;
 };
 
@@ -44,7 +45,7 @@ export type DraftWritePayload = Omit<DraftRow, 'id'> & {
 };
 
 export const DRAFT_RECORD_SELECT =
-  'id, user_id, doc_type, title, recipient, content, issuer, date, provider, contact_name, contact_phone, attachments, workflow_stage, collected_facts, missing_fields, planning, outline, sections, active_rule_ids, active_reference_ids, version_count, generated_title, generated_content, updated_at';
+  'id, user_id, doc_type, title, recipient, content, issuer, date, provider, contact_name, contact_phone, attachments, workflow_stage, collected_facts, missing_fields, planning, outline, sections, active_rule_ids, active_reference_ids, version_count, generated_title, generated_content, review_state, updated_at';
 
 function normalizeText(value?: string) {
   return value && value.length > 0 ? value : null;
@@ -80,6 +81,7 @@ export function buildDraftWritePayload({
     version_count: 0,
     generated_title: null,
     generated_content: null,
+    review_state: null,
   };
 }
 
@@ -103,6 +105,7 @@ export function mergeProtectedDraftFields({
     version_count: typeof existingDraft.version_count === 'number' ? existingDraft.version_count : 0,
     generated_title: existingDraft.generated_title || null,
     generated_content: existingDraft.generated_content || null,
+    review_state: existingDraft.review_state || null,
   };
 }
 
@@ -130,6 +133,7 @@ export function toDraftResponse(draft: DraftRow) {
     versionCount: typeof draft.version_count === 'number' ? draft.version_count : 0,
     generatedTitle: draft.generated_title || '',
     generatedContent: draft.generated_content || '',
+    reviewState: draft.review_state || null,
     updatedAt: draft.updated_at || null,
   };
 }

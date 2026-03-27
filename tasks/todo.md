@@ -3,8 +3,8 @@
 - [x] Begin Phase 3 execution and complete Wave 1 plan `03-01`
 - [x] Verify Wave 1 outputs, write `03-01-SUMMARY.md`, and commit atomically
 - [x] Execute Phase 03 Plan 02 and commit grounded provenance work atomically
-- [ ] Execute Phase 03 Plan 03 and commit review freshness/export gate work atomically
-- [ ] Verify Wave 2 outputs, write `03-02-SUMMARY.md` and `03-03-SUMMARY.md`
+- [x] Execute Phase 03 Plan 03 and commit review freshness/export gate work atomically
+- [x] Verify Wave 2 outputs, write `03-02-SUMMARY.md` and `03-03-SUMMARY.md`
 - [ ] Execute Phase 03 Plan 04 and commit preview-first compare/accept work atomically
 - [ ] Run Phase 3 validation, update planning artifacts, and commit execution results
 - [ ] Record Phase 3 execution review notes
@@ -141,6 +141,14 @@
 - Phase 2 node:test, telemetry, and seeded Playwright patterns reused instead of introducing new frameworks
 - TRUST-04 compare/accept semantics and TRUST-05 section-scoped unchanged-section guarantees are explicit route contracts, not implied UI behavior
 - core safety verification stays provider-free; browser proof reuses the seeded restore/compare path instead of paid-provider calls
+
+- Phase 03 Plan 03 completed on 2026-03-27.
+- Review now persists deterministic document-type checks as authoritative `drafts.review_state` content hashes, and export rejects both missing and stale review state before document generation starts.
+- Verification evidence for `03-03`:
+- `node --experimental-strip-types --test tests/phase-03/contracts/review-policy-contract.test.ts`
+- `node --experimental-strip-types --test tests/phase-03/contracts/export-review-gate-contract.test.ts`
+- `node --experimental-strip-types --test tests/phase-03/telemetry/trust-route-telemetry.test.ts`
+- `npm run build`
 
 - Phase 2 execution completed on 2026-03-27 across plans `02-01` through `02-04`, closing SAFE-01 through SAFE-04 before any larger brownfield refactor work.
 - SAFE-03 now has a deterministic local Playwright smoke built on the shared Phase 2 seed harness; it logs in as `phase2.alice@example.com`, opens `/generate?draft=8e274be8-48e6-4065-9b9b-6f8435b6878b`, and proves review/export readiness without live provider calls.

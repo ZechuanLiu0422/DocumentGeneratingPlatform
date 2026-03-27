@@ -3,7 +3,7 @@ import { createRequestContext, handleRouteError, ok } from '@/lib/api';
 import { requireRouteUser } from '@/lib/auth';
 import { loadRuleAndReferenceContext } from '@/lib/collaborative-route-helpers';
 import { createVersionSnapshot, getDraftById, saveDraftState } from '@/lib/collaborative-store';
-import { reviewWorkflow } from '@/lib/official-document-workflow';
+import { buildPersistedReviewState, reviewWorkflow } from '@/lib/official-document-workflow';
 import { enforceDailyQuota, recordUsageEvent } from '@/lib/quota';
 import { enforceRateLimit } from '@/lib/ratelimit';
 import { reviewRequestSchema } from '@/lib/validation';
@@ -14,6 +14,7 @@ export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
   const context = createRequestContext(request, '/api/ai/review');
+  let reviewTelemetry: Record<string, unknown> = {};
 
   try {
     const { supabase, user } = await requireRouteUser();
@@ -51,6 +52,17 @@ export async function POST(request: NextRequest) {
       references,
       attachments: draft.attachments,
     });
+    const reviewState = buildPersistedReviewState({
+      docType: draft.doc_type,
+      title: draft.generated_title || draft.title || '',
+      content: draft.generated_content || '',
+      sections: draft.sections,
+      checks,
+    });
+    reviewTelemetry = {
+      review_hash: reviewState.content_hash,
+      review_status: reviewState.status,
+    };
     const workflowStage = getAuthoritativeWorkflowStage('review_applied');
 
     await saveDraftState(supabase, {
@@ -79,6 +91,7 @@ export async function POST(request: NextRequest) {
         active_reference_ids: draft.active_reference_ids,
         generated_title: draft.generated_title || draft.title || '',
         generated_content: draft.generated_content || '',
+        review_state: reviewState,
         version_count: draft.version_count,
       },
     });
@@ -90,6 +103,7 @@ export async function POST(request: NextRequest) {
       title: draft.generated_title || draft.title || '',
       content: draft.generated_content || '',
       sections: draft.sections,
+      reviewState,
       changeSummary: '已运行定稿检查',
     });
 
@@ -101,7 +115,7 @@ export async function POST(request: NextRequest) {
     });
 
     context.workflow_stage = workflowStage;
-    return ok(context, { checks });
+    return ok(context, { checks, reviewState }, 200, reviewTelemetry);
   } catch (error) {
     try {
       const { supabase, user } = await requireRouteUser();
@@ -113,6 +127,6 @@ export async function POST(request: NextRequest) {
       });
     } catch {}
 
-    return handleRouteError(error, context);
+    return handleRouteError(error, context, reviewTelemetry);
   }
 }

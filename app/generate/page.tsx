@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { buildDraftSaveRequest, deriveHydratedDraftView } from '@/lib/generate-workspace';
+import { buildDraftSaveRequest, deriveHydratedDraftView, type ReviewState as PersistedReviewState } from '@/lib/generate-workspace';
 
 type Phrase = {
   id: string;
@@ -75,6 +75,8 @@ type ReviewCheck = {
   message: string;
   fixPrompt: string;
 };
+
+type ReviewState = PersistedReviewState;
 
 type VersionItem = {
   id: string;
@@ -159,6 +161,7 @@ type Draft = {
   versionCount: number;
   generatedTitle: string;
   generatedContent: string;
+  reviewState?: ReviewState | null;
 };
 
 const MAX_PLANNING_SECTIONS = 8;
@@ -323,6 +326,8 @@ function GeneratePageContent() {
   const [fullInstruction, setFullInstruction] = useState('');
   const [sectionInstructions, setSectionInstructions] = useState<Record<string, string>>({});
   const [reviewChecks, setReviewChecks] = useState<ReviewCheck[]>([]);
+  const [reviewState, setReviewState] = useState<ReviewState | null>(null);
+  const [reviewGateMessage, setReviewGateMessage] = useState('');
   const [versions, setVersions] = useState<VersionItem[]>([]);
   const [busyAction, setBusyAction] = useState('');
   const [ruleForm, setRuleForm] = useState({
@@ -364,6 +369,7 @@ function GeneratePageContent() {
     setOutlineSections(hydratedView.outlineSections);
     setOutlineRisks(hydratedView.outlineRisks);
     setSections(hydratedView.sections);
+    setReviewState(hydratedView.reviewState);
   };
 
   const fetchVersions = async (draftId: string) => {
@@ -502,6 +508,8 @@ function GeneratePageContent() {
     setFullInstruction('');
     setSectionInstructions({});
     setReviewChecks([]);
+    setReviewState(null);
+    setReviewGateMessage('');
     setVersions([]);
     setSessionReferences([]);
     setActiveReferenceIds([]);
@@ -995,6 +1003,8 @@ function GeneratePageContent() {
       }
 
       setSections(data.sections || []);
+      setReviewState(null);
+      setReviewGateMessage('正文已更新，请重新运行定稿检查后再导出。');
       if (data.title) {
         setFormData((prev) => ({ ...prev, title: data.title }));
       }
@@ -1022,6 +1032,8 @@ function GeneratePageContent() {
     }
 
     setReviewChecks([]);
+    setReviewState(null);
+    setReviewGateMessage('');
     await handleGenerateDraft('full');
   };
 
@@ -1053,6 +1065,8 @@ function GeneratePageContent() {
       }
 
       setSections(data.updatedSections || []);
+      setReviewState(null);
+      setReviewGateMessage('正文已修改，请重新运行定稿检查后再导出。');
       if (data.title) {
         setFormData((prev) => ({ ...prev, title: data.title }));
       }
@@ -1097,6 +1111,8 @@ function GeneratePageContent() {
       }
 
       setReviewChecks(data.checks || []);
+      setReviewState(data.reviewState || null);
+      setReviewGateMessage('');
       setWorkflowStage('review');
       setCurrentStep('review');
       fetchVersions(currentDraftId);
@@ -1126,6 +1142,7 @@ function GeneratePageContent() {
 
     if (data.draft) {
       hydrateDraft(data.draft);
+      setReviewGateMessage('');
       fetchVersions(data.draft.id);
     }
   };
@@ -1159,8 +1176,18 @@ function GeneratePageContent() {
       });
 
       const data = await response.json();
-      if (!response.ok || !data.file_data) {
+      if (!response.ok) {
+        if (data.code === 'REVIEW_REQUIRED' || data.code === 'REVIEW_STALE') {
+          setReviewGateMessage(data.error || '请重新运行定稿检查后再导出');
+          setCurrentStep('review');
+          return;
+        }
+
         throw new Error(data.error || '导出失败');
+      }
+
+      if (!data.file_data) {
+        throw new Error('导出失败');
       }
 
       const byteCharacters = atob(data.file_data);
@@ -2165,6 +2192,18 @@ function GeneratePageContent() {
                       {busyAction === 'download' ? '导出中...' : '下载 Word 定稿'}
                     </button>
                   </div>
+
+                  {(reviewGateMessage || reviewState) && (
+                    <div
+                      className={`rounded-xl border px-4 py-3 text-sm ${
+                        reviewState?.status === 'pass'
+                          ? 'border-green-200 bg-green-50 text-green-700'
+                          : 'border-amber-200 bg-amber-50 text-amber-800'
+                      }`}
+                    >
+                      {reviewGateMessage || `最近一次定稿检查结果：${reviewState?.status === 'pass' ? '通过' : reviewState?.status === 'warning' ? '有提醒' : '未通过'}。`}
+                    </div>
+                  )}
 
                   <div className="space-y-3">
                     {reviewChecks.length > 0 ? (
