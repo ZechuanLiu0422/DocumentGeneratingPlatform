@@ -132,6 +132,73 @@ export const pendingChangeStateSchema = changeCandidatePreviewSchema.extend({
 
 export const candidateDecisionSchema = z.enum(['preview', 'accept', 'reject']);
 
+export const draftOperationTypeSchema = z.enum([
+  'draft_generate',
+  'draft_regenerate',
+  'draft_revise',
+  'review',
+  'export',
+]);
+
+export const draftOperationStatusSchema = z.enum(['queued', 'running', 'succeeded', 'failed', 'cancelled']);
+
+export const draftOperationIdempotencyKeySchema = z
+  .string()
+  .trim()
+  .min(1, '幂等键不能为空')
+  .max(160, '幂等键不能超过 160 个字符')
+  .regex(/^[A-Za-z0-9:_-]+$/, '幂等键格式不正确');
+
+export const draftOperationPayloadSchema = z.record(z.string(), z.unknown());
+export const draftOperationResultSchema = z.record(z.string(), z.unknown());
+
+export const draftOperationInsertSchema = z.object({
+  user_id: z.string().uuid(),
+  draft_id: z.string().uuid().nullable().optional().default(null),
+  operation_type: draftOperationTypeSchema,
+  status: draftOperationStatusSchema.default('queued'),
+  idempotency_key: draftOperationIdempotencyKeySchema,
+  payload: draftOperationPayloadSchema,
+  result: draftOperationResultSchema.nullable().optional().default(null),
+  error_code: z.string().trim().max(120).nullable().optional().default(null),
+  error_message: z.string().trim().max(1000).nullable().optional().default(null),
+  attempt_count: z.number().int().min(0).optional().default(0),
+  max_attempts: z.number().int().min(1).max(20).optional().default(3),
+  lease_token: z.string().trim().max(160).nullable().optional().default(null),
+  lease_expires_at: z.string().datetime({ offset: true }).nullable().optional().default(null),
+  last_heartbeat_at: z.string().datetime({ offset: true }).nullable().optional().default(null),
+  started_at: z.string().datetime({ offset: true }).nullable().optional().default(null),
+  completed_at: z.string().datetime({ offset: true }).nullable().optional().default(null),
+});
+
+export const draftOperationRecordSchema = draftOperationInsertSchema.extend({
+  id: z.string().uuid(),
+  created_at: z.string().datetime({ offset: true }),
+  updated_at: z.string().datetime({ offset: true }),
+});
+
+export const draftOperationReadModelSchema = z.object({
+  id: z.string().uuid(),
+  userId: z.string().uuid(),
+  draftId: z.string().uuid().nullable(),
+  operationType: draftOperationTypeSchema,
+  status: draftOperationStatusSchema,
+  idempotencyKey: draftOperationIdempotencyKeySchema,
+  payload: draftOperationPayloadSchema,
+  result: draftOperationResultSchema.nullable(),
+  errorCode: z.string().trim().max(120).nullable(),
+  errorMessage: z.string().trim().max(1000).nullable(),
+  attemptCount: z.number().int().min(0),
+  maxAttempts: z.number().int().min(1).max(20),
+  leaseToken: z.string().trim().max(160).nullable(),
+  leaseExpiresAt: z.string().datetime({ offset: true }).nullable(),
+  lastHeartbeatAt: z.string().datetime({ offset: true }).nullable(),
+  startedAt: z.string().datetime({ offset: true }).nullable(),
+  completedAt: z.string().datetime({ offset: true }).nullable(),
+  createdAt: z.string().datetime({ offset: true }),
+  updatedAt: z.string().datetime({ offset: true }),
+});
+
 export const changeCandidateAcceptRequestSchema = z
   .object({
     draftId: z.string().uuid(),
@@ -522,3 +589,8 @@ export type ChangeCandidatePreview = {
   diffSummary?: string;
 };
 export type PendingChangeState = z.infer<typeof pendingChangeStateSchema>;
+export type DraftOperationType = z.infer<typeof draftOperationTypeSchema>;
+export type DraftOperationStatus = z.infer<typeof draftOperationStatusSchema>;
+export type DraftOperationInsert = z.infer<typeof draftOperationInsertSchema>;
+export type DraftOperationRecord = z.infer<typeof draftOperationRecordSchema>;
+export type DraftOperationReadModel = z.infer<typeof draftOperationReadModelSchema>;
