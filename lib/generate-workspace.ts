@@ -53,6 +53,32 @@ export type ReviewState = {
   }>;
 };
 
+export type PendingChange = {
+  candidateId: string;
+  action: 'regenerate' | 'revise' | 'restore';
+  targetType: 'selection' | 'section' | 'full';
+  targetSectionIds: string[];
+  changedSectionIds: string[];
+  unchangedSectionIds: string[];
+  before: {
+    title?: string | null;
+    content?: string | null;
+    sections: DraftSection[];
+    reviewState?: ReviewState | null;
+  };
+  after: {
+    title?: string | null;
+    content?: string | null;
+    sections: DraftSection[];
+    reviewState?: ReviewState | null;
+  };
+  diffSummary?: string;
+  userId: string;
+  createdAt: string;
+  expiresAt: string;
+  baseUpdatedAt: string;
+};
+
 export type DraftSnapshot = {
   id: string;
   doc_type: 'notice' | 'letter' | 'request' | 'report';
@@ -89,6 +115,7 @@ export type DraftSnapshot = {
   generatedTitle: string;
   generatedContent: string;
   reviewState?: ReviewState | null;
+  pendingChange?: PendingChange | null;
 };
 
 export type DraftSaveRequest = {
@@ -137,6 +164,7 @@ export type HydratedDraftView = {
   outlineRisks: string[];
   sections: DraftSection[];
   reviewState: ReviewState | null;
+  pendingChange: PendingChange | null;
 };
 
 function mapStageToStep(stage?: WorkflowStage): WorkflowStage {
@@ -213,5 +241,6 @@ export function deriveHydratedDraftView(draft: DraftSnapshot): HydratedDraftView
     outlineRisks: draft.outline?.risks || [],
     sections: draft.sections || [],
     reviewState: draft.reviewState || null,
+    pendingChange: draft.pendingChange || null,
   };
 }

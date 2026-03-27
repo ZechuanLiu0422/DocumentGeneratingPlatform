@@ -34,11 +34,11 @@ async function globalSetup(config: FullConfig) {
   await page.getByPlaceholder('you@example.com').fill(scenario.user.email);
   await page.getByPlaceholder('请输入密码').fill(scenario.user.password);
 
-  await Promise.all([
-    page.waitForURL('**/', { timeout: 30_000 }),
-    page.getByRole('button', { name: '登录' }).click(),
+  await page.getByRole('button', { name: '登录' }).click();
+  await Promise.any([
+    page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 30_000 }),
+    page.getByRole('button', { name: '退出登录' }).waitFor({ timeout: 30_000 }),
   ]);
-
   await page.getByRole('button', { name: '退出登录' }).waitFor({ timeout: 30_000 });
   await context.storageState({ path: STORAGE_STATE_PATH });
   await browser.close();

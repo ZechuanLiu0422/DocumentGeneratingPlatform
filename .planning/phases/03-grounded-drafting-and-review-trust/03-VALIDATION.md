@@ -38,14 +38,14 @@ created: 2026-03-27
 
 | Task ID | Plan | Wave | Requirement | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|-----------|-------------------|-------------|--------|
-| 03-01-01 | 01 | 1 | TRUST-01, TRUST-02, TRUST-04, TRUST-05 | harness smoke | `node --experimental-strip-types --test tests/phase-03/contracts/shared-fixtures.ts && rg -n "test:phase-03:contracts" package.json` | ✅ | ⬜ |
-| 03-01-02 | 01 | 1 | TRUST-01, TRUST-02, TRUST-04, TRUST-05 | foundation contract | `node --experimental-strip-types --test tests/phase-03/contracts/provenance-persistence-contract.test.ts tests/phase-03/contracts/change-candidate-contract.test.ts` | ✅ | ⬜ |
-| 03-02-01 | 02 | 2 | TRUST-01, TRUST-02 | route contract | `node --experimental-strip-types --test tests/phase-03/contracts/grounded-draft-route-contract.test.ts` | ✅ | ⬜ |
-| 03-02-02 | 02 | 2 | TRUST-01, TRUST-02 | read model + build | `node --experimental-strip-types --test tests/phase-03/contracts/provenance-read-model-contract.test.ts && npm run build` | ✅ | ⬜ |
-| 03-03-01 | 03 | 2 | TRUST-03 | review policy | `node --experimental-strip-types --test tests/phase-03/contracts/review-policy-contract.test.ts` | ✅ | ⬜ |
-| 03-03-02 | 03 | 2 | TRUST-03 | export gate + telemetry + build | `node --experimental-strip-types --test tests/phase-03/contracts/export-review-gate-contract.test.ts tests/phase-03/telemetry/trust-route-telemetry.test.ts && npm run build` | ✅ | ⬜ |
-| 03-04-01 | 04 | 3 | TRUST-04, TRUST-05 | acceptance route contract | `node --experimental-strip-types --test tests/phase-03/contracts/acceptance-route-contract.test.ts` | ✅ | ⬜ |
-| 03-04-02 | 04 | 3 | TRUST-04, TRUST-05 | seeded browser wiring proof | `npm run test:phase-02:rls:reset && npm run test:phase-02:e2e:seed && npm run build && npm run test:phase-03:e2e` | ✅ | ⬜ |
+| 03-01-01 | 01 | 1 | TRUST-01, TRUST-02, TRUST-04, TRUST-05 | harness smoke | `node --experimental-strip-types --test tests/phase-03/contracts/shared-fixtures.ts && rg -n "test:phase-03:contracts" package.json` | ✅ | ✅ |
+| 03-01-02 | 01 | 1 | TRUST-01, TRUST-02, TRUST-04, TRUST-05 | foundation contract | `node --experimental-strip-types --test tests/phase-03/contracts/provenance-persistence-contract.test.ts tests/phase-03/contracts/change-candidate-contract.test.ts` | ✅ | ✅ |
+| 03-02-01 | 02 | 2 | TRUST-01, TRUST-02 | route contract | `node --experimental-strip-types --test tests/phase-03/contracts/grounded-draft-route-contract.test.ts` | ✅ | ✅ |
+| 03-02-02 | 02 | 2 | TRUST-01, TRUST-02 | read model + build | `node --experimental-strip-types --test tests/phase-03/contracts/provenance-read-model-contract.test.ts && npm run build` | ✅ | ✅ |
+| 03-03-01 | 03 | 2 | TRUST-03 | review policy | `node --experimental-strip-types --test tests/phase-03/contracts/review-policy-contract.test.ts` | ✅ | ✅ |
+| 03-03-02 | 03 | 2 | TRUST-03 | export gate + telemetry + build | `node --experimental-strip-types --test tests/phase-03/contracts/export-review-gate-contract.test.ts tests/phase-03/telemetry/trust-route-telemetry.test.ts && npm run build` | ✅ | ✅ |
+| 03-04-01 | 04 | 3 | TRUST-04, TRUST-05 | acceptance route contract | `node --experimental-strip-types --test tests/phase-03/contracts/acceptance-route-contract.test.ts` | ✅ | ✅ |
+| 03-04-02 | 04 | 3 | TRUST-04, TRUST-05 | seeded browser wiring proof | `npm run test:phase-02:rls:reset && npm run test:phase-02:e2e:seed && npm run build && npm run test:phase-03:e2e` | ✅ | ✅ |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 

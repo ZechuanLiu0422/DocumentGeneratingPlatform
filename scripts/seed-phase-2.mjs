@@ -147,7 +147,10 @@ function buildE2EScenario(seededUsers) {
       previewTitle: 'alice generated title',
       sectionHeading: '一、alice 正文',
       bodyExcerpt: 'alice owned body',
+      currentSecondBody: '请于下周三前完成材料报送。',
+      restoredSecondBody: '请于本周五前提交整改清单。',
       versionSummary: 'alice seeded version',
+      candidateSummary: '从历史版本恢复：alice seeded version',
     },
   };
 }
@@ -221,6 +224,70 @@ async function upsertSingle(admin, table, row, conflictTarget = 'id') {
 
 function buildDraftRow(userKey, userId) {
   const otherUserKey = userKey === 'alice' ? 'bob' : 'alice';
+  const sections = [
+    {
+      id: `section-${userKey}-1`,
+      heading: `一、${userKey} 正文`,
+      body: `${userKey} owned body`,
+    },
+    {
+      id: `section-${userKey}-2`,
+      heading: '二、工作安排',
+      body: '请于下周三前完成材料报送。',
+    },
+  ];
+  const restoredSections = [
+    sections[0],
+    {
+      ...sections[1],
+      body: '请于本周五前提交整改清单。',
+    },
+  ];
+  const reviewState = {
+    content_hash: `sha256:${userKey}-draft-review-hash`,
+    doc_type: 'notice',
+    status: 'pass',
+    ran_at: '2026-03-27T18:00:00.000Z',
+    checks: [
+      {
+        code: 'notice_action_required',
+        status: 'pass',
+        message: '正文包含明确执行要求。',
+        fixPrompt: '',
+      },
+    ],
+  };
+  const pendingChange =
+    userKey === 'alice'
+      ? {
+          candidateId: 'e76a6a50-59eb-4ff5-9501-ffeffdf0f4b8',
+          action: 'restore',
+          targetType: 'section',
+          targetSectionIds: [sections[1].id],
+          changedSectionIds: [sections[1].id],
+          unchangedSectionIds: [sections[0].id],
+          before: {
+            title: `${userKey} generated title`,
+            content: `${sections[0].heading}\n${sections[0].body}\n\n${sections[1].heading}\n${sections[1].body}`,
+            sections,
+            reviewState,
+          },
+          after: {
+            title: `${userKey} generated title`,
+            content: `${restoredSections[0].heading}\n${restoredSections[0].body}\n\n${restoredSections[1].heading}\n${restoredSections[1].body}`,
+            sections: restoredSections,
+            reviewState: {
+              ...reviewState,
+              content_hash: `sha256:${userKey}-restored-review-hash`,
+            },
+          },
+          diffSummary: `从历史版本恢复：${userKey} seeded version`,
+          userId,
+          createdAt: '2026-03-27T18:05:00.000Z',
+          expiresAt: '2026-12-31T23:59:59.000Z',
+          baseUpdatedAt: '2026-03-27T18:05:00.000Z',
+        }
+      : null;
 
   return {
     id: PHASE_02_FIXTURES.drafts[userKey],
@@ -268,18 +335,15 @@ function buildDraftRow(userKey, userId) {
         },
       ],
     },
-    sections: [
-      {
-        id: `section-${userKey}-1`,
-        heading: `一、${userKey} 正文`,
-        body: `${userKey} owned body`,
-      },
-    ],
+    sections,
     active_rule_ids: [PHASE_02_FIXTURES.writingRules[userKey]],
     active_reference_ids: [PHASE_02_FIXTURES.referenceAssets[userKey]],
     version_count: 1,
     generated_title: `${userKey} generated title`,
-    generated_content: `${userKey} generated content`,
+    generated_content: `${sections[0].heading}\n${sections[0].body}\n\n${sections[1].heading}\n${sections[1].body}`,
+    review_state: reviewState,
+    pending_change: pendingChange,
+    updated_at: '2026-03-27T18:05:00.000Z',
   };
 }
 
@@ -302,20 +366,41 @@ function buildDocumentRow(userKey, userId) {
 }
 
 function buildDocumentVersionRow(userKey, userId) {
+  const sections = [
+    {
+      id: `section-${userKey}-1`,
+      heading: `一、${userKey} 正文`,
+      body: `${userKey} owned body`,
+    },
+    {
+      id: `section-${userKey}-2`,
+      heading: '二、工作安排',
+      body: '请于本周五前提交整改清单。',
+    },
+  ];
+
   return {
     id: PHASE_02_FIXTURES.documentVersions[userKey],
     draft_id: PHASE_02_FIXTURES.drafts[userKey],
     user_id: userId,
     stage: 'draft_generated',
-    title: `${userKey} version title`,
-    content: `${userKey} version content`,
-    sections: [
-      {
-        id: `version-${userKey}-section-1`,
-        heading: `${userKey} version heading`,
-        body: `${userKey} version body`,
-      },
-    ],
+    title: `${userKey} generated title`,
+    content: `${sections[0].heading}\n${sections[0].body}\n\n${sections[1].heading}\n${sections[1].body}`,
+    sections,
+    review_state: {
+      content_hash: `sha256:${userKey}-version-review-hash`,
+      doc_type: 'notice',
+      status: 'pass',
+      ran_at: '2026-03-27T18:01:00.000Z',
+      checks: [
+        {
+          code: 'notice_action_required',
+          status: 'pass',
+          message: '正文包含明确执行要求。',
+          fixPrompt: '',
+        },
+      ],
+    },
     change_summary: `${userKey} seeded version`,
   };
 }

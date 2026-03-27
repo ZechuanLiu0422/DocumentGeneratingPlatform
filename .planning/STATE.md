@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Executing Phase 03
-stopped_at: Completed Phase 03 Plan 03 verification
-last_updated: "2026-03-27T10:45:00.000Z"
+status: Ready to plan Phase 04
+stopped_at: Completed Phase 03 validation and execution closeout
+last_updated: "2026-03-27T16:56:25Z"
 progress:
   total_phases: 5
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 12
-  completed_plans: 9
+  completed_plans: 12
 ---
 
 # Project State
@@ -19,37 +19,33 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-26)
 
 **Core value:** Users can turn incomplete inputs into a reliable, policy-aligned official document draft quickly without losing control of drafts, versions, or organizational writing context.
-**Current focus:** Phase 03 — grounded-drafting-and-review-trust
+**Current focus:** Phase 04 — durable-execution-and-export-hardening
 
 ## Current Position
 
-Phase: 03 (grounded-drafting-and-review-trust) — EXECUTING
-Plan: 4 of 4
+Phase: 04 (durable-execution-and-export-hardening) — READY FOR PLANNING
+Plan: not started
 
 ## Performance Metrics
 
-**Velocity:**
+**Execution Status:**
 
-- Total plans completed: 8
-- Average duration: 34 min
-- Total execution time: 4.6 hours
+- Total plans completed: 12
+- Completed phases: 01, 02, 03
+- Latest completed plan: `03-04`
 
 **By Phase:**
 
-| Phase | Plans | Total | Avg/Plan |
-|-------|-------|-------|----------|
-| 01 | 4 | 145 min | 36 min |
-| 02 | 4 | 128 min | 32 min |
+| Phase | Plans | Status |
+|-------|-------|--------|
+| 01 | 4/4 | Complete |
+| 02 | 4/4 | Complete |
+| 03 | 4/4 | Complete |
 
 **Recent Trend:**
 
-- Last 4 plans: all passed targeted verification, build checks, and the seeded browser smoke
+- Phase 03 closed with full contract coverage, telemetry verification, production build proof, and seeded browser proof.
 - Trend: Stable
-
-| Phase 02 P01 | 24 min | 2 tasks | 8 files |
-| Phase 02 P02 | 63 min | 2 tasks | 8 files |
-| Phase 02 P03 | 26 min | 2 tasks | 6 files |
-| Phase 02 P04 | 15 min | 2 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -70,22 +66,28 @@ Recent decisions affecting current work:
 - [Phase 02]: SAFE-03 must override the Next server's public Supabase env inside Playwright `webServer.env` to avoid accidentally talking to hosted `.env.local` services during browser proof.
 - [Phase 02]: SAFE-04 extends the existing `lib/api.ts` JSON logging path with structured workflow/export metadata instead of introducing a new observability stack.
 - [Phase 02]: `/api/health` now reports only coarse `status` and `checks`, avoiding provider inventory leakage in routine health probes.
+- [Phase 03]: `drafts.pending_change jsonb` is the only persisted preview-state mechanism for regenerate, revise, and restore accept/reject flows.
+- [Phase 03]: Candidate acceptance tolerates DB-managed `updated_at` drift when the accepted snapshot still matches `pending_change.before`.
+- [Phase 03]: Phase 3 seeded Playwright proof must reseed on every run and start on an isolated port to avoid reusing mutated drafts or stale local servers.
 
 ### Pending Todos
 
-- Execute `03-04` next to replace auto-apply regenerate/revise/restore flows with preview-first compare/accept behavior.
-- Preserve the authoritative `review_state jsonb` gate and provenance-bearing section contract while adding preview candidate lifecycle state.
+- Plan Phase 04 around durable background execution, export hardening, and resumable operational paths.
+- Decide whether to fix the known `/api/drafts` `docType` versus `doc_type` hydration mismatch before Phase 5, or explicitly defer it into the decomposition phase.
 
 ### Blockers/Concerns
 
-- Phase 3 should preserve the now-verified local seed/browser path so grounded drafting changes do not regress the generate workspace.
-- Browser smoke remains environment-sensitive because local verification depends on Docker-backed Supabase plus a bindable local port.
+- Browser proof remains environment-sensitive because local verification depends on Docker-backed Supabase plus a bindable local port.
+- `app/generate/page.tsx` is still monolithic; future work should avoid widening that file unless the change is directly required by a trust or operations contract.
 
 ## Latest Completed Work
 
 - Completed Phase 03 Plan 01 on 2026-03-27.
 - Completed Phase 03 Plan 02 on 2026-03-27.
 - Completed Phase 03 Plan 03 on 2026-03-27.
+- Completed Phase 03 Plan 04 on 2026-03-27.
+- Closed Phase 03 validation with `npm run test:phase-03:contracts`, `node --experimental-strip-types --test tests/phase-03/telemetry/trust-route-telemetry.test.ts`, `npm run build`, and `npm run test:phase-03:e2e`.
+- Added preview-first compare/accept contracts, `drafts.pending_change jsonb` storage, and seeded browser proof for restore reject/accept flows.
 - Added Phase 3 contract scripts, trust fixtures, and Phase 2-derived route helper wrappers under `tests/phase-03/contracts/`.
 - Extended validation, draft/version normalization, and restore helpers to carry optional provenance plus `review_state jsonb` contracts.
 - Added `supabase/migrations/20260327173000_phase_03_review_state_jsonb.sql` for explicit review freshness storage on `drafts` and `document_versions`.
@@ -94,6 +96,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-03-26T15:52:09.192Z
-Stopped at: Completed Phase 02 execution
+Last session: 2026-03-27T16:56:25Z
+Stopped at: Completed Phase 03 execution
 Resume file: None

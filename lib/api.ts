@@ -73,6 +73,8 @@ function isSchemaMismatchError(error: unknown) {
     'active_reference_ids',
     'generated_title',
     'generated_content',
+    'review_state',
+    'pending_change',
     'planning',
     'drafts_workflow_stage_check',
     'document_versions',
@@ -102,7 +104,7 @@ function normalizeError(error: unknown) {
   if (isSchemaMismatchError(error)) {
     return new AppError(
       500,
-      '数据库结构未完成升级，请执行最新 Supabase migrations（至少包含 20260321110000_collaborative_writing_upgrade.sql 和 20260323150000_outline_planning_upgrade.sql）后重试',
+      '数据库结构未完成升级，请执行最新 Supabase migrations（至少包含 20260321110000_collaborative_writing_upgrade.sql、20260323150000_outline_planning_upgrade.sql、20260327173000_phase_03_review_state_jsonb.sql 和 20260327180000_phase_03_pending_change_jsonb.sql）后重试',
       'SCHEMA_OUTDATED'
     );
   }

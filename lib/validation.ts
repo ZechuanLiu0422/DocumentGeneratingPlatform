@@ -123,6 +123,15 @@ export const changeCandidatePreviewSchema = z.object({
   diffSummary: z.string().trim().max(500).optional().default(''),
 });
 
+export const pendingChangeStateSchema = changeCandidatePreviewSchema.extend({
+  userId: z.string().uuid(),
+  createdAt: z.string().datetime({ offset: true }),
+  expiresAt: z.string().datetime({ offset: true }),
+  baseUpdatedAt: z.string().datetime({ offset: true }),
+});
+
+export const candidateDecisionSchema = z.enum(['preview', 'accept', 'reject']);
+
 export const changeCandidateAcceptRequestSchema = z
   .object({
     draftId: z.string().uuid(),
@@ -381,7 +390,33 @@ export const draftRequestSchema = z.object({
   provider: providerSchema,
   mode: z.enum(['full', 'section']).default('full'),
   sectionId: z.string().trim().max(80).optional().default(''),
+  decision: candidateDecisionSchema.optional().default('preview'),
+  candidateId: z.string().uuid().optional().nullable(),
   sessionReferences: z.array(sessionReferenceSchema).max(5).default([]),
+}).superRefine((value, ctx) => {
+  if (value.mode === 'section' && value.decision === 'preview' && !value.sectionId.trim()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['sectionId'],
+      message: '段落重生成必须指定目标段落',
+    });
+  }
+
+  if (value.mode === 'full' && value.decision !== 'preview') {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['decision'],
+      message: '整稿生成不支持候选接受或拒绝',
+    });
+  }
+
+  if (value.decision !== 'preview' && !value.candidateId) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['candidateId'],
+      message: '接受或拒绝候选变更时必须提供 candidateId',
+    });
+  }
 });
 
 export const reviseRequestSchema = z.object({
@@ -390,8 +425,42 @@ export const reviseRequestSchema = z.object({
   targetType: z.enum(['selection', 'section', 'full']),
   targetId: z.string().trim().max(80).optional().default(''),
   selectedText: z.string().trim().max(2000).optional().default(''),
-  instruction: limitedString('修改指令', 1000),
+  instruction: z.string().trim().max(1000).optional().default(''),
+  decision: candidateDecisionSchema.optional().default('preview'),
+  candidateId: z.string().uuid().optional().nullable(),
   sessionReferences: z.array(sessionReferenceSchema).max(5).default([]),
+}).superRefine((value, ctx) => {
+  if (value.decision === 'preview' && !value.instruction.trim()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['instruction'],
+      message: '修改指令不能为空',
+    });
+  }
+
+  if (value.targetType === 'section' && value.decision === 'preview' && !value.targetId.trim()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['targetId'],
+      message: '段落级改写必须指定目标段落',
+    });
+  }
+
+  if (value.targetType === 'selection' && value.decision === 'preview' && !value.selectedText.trim()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['selectedText'],
+      message: '片段级改写必须提供选中文本',
+    });
+  }
+
+  if (value.decision !== 'preview' && !value.candidateId) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['candidateId'],
+      message: '接受或拒绝候选变更时必须提供 candidateId',
+    });
+  }
 });
 
 export const reviewRequestSchema = z.object({
@@ -406,7 +475,25 @@ export const versionQuerySchema = z.object({
 
 export const versionRestoreSchema = z.object({
   draftId: z.string().uuid(),
-  versionId: z.string().uuid(),
+  versionId: z.string().uuid().optional().nullable(),
+  decision: candidateDecisionSchema.optional().default('preview'),
+  candidateId: z.string().uuid().optional().nullable(),
+}).superRefine((value, ctx) => {
+  if (value.decision === 'preview' && !value.versionId) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['versionId'],
+      message: '恢复预览必须指定版本 id',
+    });
+  }
+
+  if (value.decision !== 'preview' && !value.candidateId) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['candidateId'],
+      message: '接受或拒绝候选变更时必须提供 candidateId',
+    });
+  }
 });
 
 export type SectionSourceRef = z.infer<typeof sectionSourceRefSchema>;
@@ -434,3 +521,4 @@ export type ChangeCandidatePreview = {
   after: ChangeCandidateSnapshot;
   diffSummary?: string;
 };
+export type PendingChangeState = z.infer<typeof pendingChangeStateSchema>;

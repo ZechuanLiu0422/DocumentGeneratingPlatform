@@ -120,8 +120,13 @@ test('draft route returns provenance-bearing sections and persists them for full
   const sectionPayload = await sectionResponse.json();
 
   assert.equal(sectionResponse.status, 200);
-  assert.equal(sectionPayload.sections[1].provenance.sources[0].label, '专项检查时间安排');
-  assert.equal(sectionPayload.sections[0].id, 'draft-sec-1');
+  assert.equal(sectionPayload.mode, 'preview');
+  assert.equal(sectionPayload.candidate.after.sections[1].provenance.sources[0].label, '专项检查时间安排');
+  assert.equal(sectionPayload.candidate.after.sections[0].id, 'draft-sec-1');
+  assert.equal(
+    ((persistedPayloads[1]?.workflow as Record<string, any>).pending_change.after.sections[1].provenance.sources[0].label),
+    '专项检查时间安排'
+  );
 });
 
 test('draft route rejects grounded claims when no approved evidence context is active', async (t) => {

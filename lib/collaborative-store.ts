@@ -2,7 +2,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { AppError } from '@/lib/api';
 import type { AnalyzeResult } from '@/lib/official-document-ai';
 import { buildRestoreResponse, buildRestoredSnapshot, mergeRestoredDraft } from '@/lib/version-restore';
-import type { ReviewState, SectionProvenance, TrustedDraftSection } from '@/lib/validation';
+import { pendingChangeStateSchema } from '@/lib/validation';
+import type { PendingChangeState, ReviewState, SectionProvenance, TrustedDraftSection } from '@/lib/validation';
 
 export type WritingRuleRecord = {
   id: string;
@@ -94,6 +95,7 @@ export type DraftRecord = {
   generated_title: string | null;
   generated_content: string | null;
   review_state?: ReviewState | null;
+  pending_change?: PendingChangeState | null;
   updated_at?: string;
 };
 
@@ -151,6 +153,53 @@ function normalizeSectionProvenance(value: any): SectionProvenance | null {
     summary: typeof value.summary === 'string' ? value.summary : '',
     sources,
   };
+}
+
+function normalizePendingChange(row: any): PendingChangeState | null {
+  if (!row || typeof row !== 'object') {
+    return null;
+  }
+
+  const normalized = {
+    candidateId: typeof row.candidateId === 'string' ? row.candidateId : typeof row.candidate_id === 'string' ? row.candidate_id : '',
+    action: row.action,
+    targetType:
+      typeof row.targetType === 'string'
+        ? row.targetType
+        : typeof row.target_type === 'string'
+          ? row.target_type
+          : undefined,
+    targetSectionIds: Array.isArray(row.targetSectionIds)
+      ? row.targetSectionIds
+      : Array.isArray(row.target_section_ids)
+        ? row.target_section_ids
+        : [],
+    changedSectionIds: Array.isArray(row.changedSectionIds)
+      ? row.changedSectionIds
+      : Array.isArray(row.changed_section_ids)
+        ? row.changed_section_ids
+        : [],
+    unchangedSectionIds: Array.isArray(row.unchangedSectionIds)
+      ? row.unchangedSectionIds
+      : Array.isArray(row.unchanged_section_ids)
+        ? row.unchanged_section_ids
+        : [],
+    before: row.before,
+    after: row.after,
+    diffSummary: typeof row.diffSummary === 'string' ? row.diffSummary : typeof row.diff_summary === 'string' ? row.diff_summary : '',
+    userId: typeof row.userId === 'string' ? row.userId : typeof row.user_id === 'string' ? row.user_id : '',
+    createdAt: typeof row.createdAt === 'string' ? row.createdAt : typeof row.created_at === 'string' ? row.created_at : '',
+    expiresAt: typeof row.expiresAt === 'string' ? row.expiresAt : typeof row.expires_at === 'string' ? row.expires_at : '',
+    baseUpdatedAt:
+      typeof row.baseUpdatedAt === 'string'
+        ? row.baseUpdatedAt
+        : typeof row.base_updated_at === 'string'
+          ? row.base_updated_at
+          : '',
+  };
+
+  const parsed = pendingChangeStateSchema.safeParse(normalized);
+  return parsed.success ? parsed.data : null;
 }
 
 export function normalizeDraftSectionRecord(row: any): DraftSectionRecord {
@@ -212,6 +261,7 @@ export function normalizeDraftRecord(row: any): DraftRecord {
     generated_title: row.generated_title || null,
     generated_content: row.generated_content || null,
     review_state: normalizeReviewState(row.review_state),
+    pending_change: normalizePendingChange(row.pending_change),
   };
 }
 
@@ -227,7 +277,7 @@ export async function getDraftById(supabase: SupabaseClient, userId: string, dra
   const { data, error } = await supabase
     .from('drafts')
     .select(
-      'id, user_id, doc_type, title, recipient, content, issuer, date, provider, contact_name, contact_phone, attachments, workflow_stage, collected_facts, missing_fields, planning, outline, sections, active_rule_ids, active_reference_ids, version_count, generated_title, generated_content, review_state, updated_at'
+      'id, user_id, doc_type, title, recipient, content, issuer, date, provider, contact_name, contact_phone, attachments, workflow_stage, collected_facts, missing_fields, planning, outline, sections, active_rule_ids, active_reference_ids, version_count, generated_title, generated_content, review_state, pending_change, updated_at'
     )
     .eq('id', draftId)
     .eq('user_id', userId)
@@ -238,6 +288,22 @@ export async function getDraftById(supabase: SupabaseClient, userId: string, dra
   }
 
   return normalizeDraftRecord(data);
+}
+
+export async function getVersionById(supabase: SupabaseClient, userId: string, draftId: string, versionId: string) {
+  const { data, error } = await supabase
+    .from('document_versions')
+    .select('id, draft_id, user_id, stage, title, content, sections, review_state, change_summary, created_at')
+    .eq('id', versionId)
+    .eq('draft_id', draftId)
+    .eq('user_id', userId)
+    .single();
+
+  if (error || !data) {
+    throw new AppError(404, '版本不存在或无权访问', 'VERSION_NOT_FOUND');
+  }
+
+  return normalizeVersionRecord(data);
 }
 
 export async function listVersionsForDraft(supabase: SupabaseClient, userId: string, draftId: string) {
@@ -445,8 +511,10 @@ export async function saveDraftState(
     provider: DraftRecord['provider'];
     baseFields?: Partial<DraftRecord>;
     workflow: Partial<DraftRecord>;
+    updatedAt?: string;
   }
 ) {
+  const updatedAt = payload.updatedAt || new Date().toISOString();
   const draftPayload = {
     user_id: payload.userId,
     doc_type: payload.docType,
@@ -471,7 +539,8 @@ export async function saveDraftState(
     generated_title: payload.workflow.generated_title || null,
     generated_content: payload.workflow.generated_content || null,
     review_state: payload.workflow.review_state || null,
-    updated_at: new Date().toISOString(),
+    pending_change: payload.workflow.pending_change || null,
+    updated_at: updatedAt,
   };
 
   if (payload.draftId) {
@@ -481,7 +550,7 @@ export async function saveDraftState(
       .eq('id', payload.draftId)
       .eq('user_id', payload.userId)
       .select(
-        'id, user_id, doc_type, title, recipient, content, issuer, date, provider, contact_name, contact_phone, attachments, workflow_stage, collected_facts, missing_fields, planning, outline, sections, active_rule_ids, active_reference_ids, version_count, generated_title, generated_content, review_state, updated_at'
+        'id, user_id, doc_type, title, recipient, content, issuer, date, provider, contact_name, contact_phone, attachments, workflow_stage, collected_facts, missing_fields, planning, outline, sections, active_rule_ids, active_reference_ids, version_count, generated_title, generated_content, review_state, pending_change, updated_at'
       )
       .single();
 
@@ -496,7 +565,7 @@ export async function saveDraftState(
     .from('drafts')
     .insert(draftPayload)
     .select(
-      'id, user_id, doc_type, title, recipient, content, issuer, date, provider, contact_name, contact_phone, attachments, workflow_stage, collected_facts, missing_fields, planning, outline, sections, active_rule_ids, active_reference_ids, version_count, generated_title, generated_content, review_state, updated_at'
+      'id, user_id, doc_type, title, recipient, content, issuer, date, provider, contact_name, contact_phone, attachments, workflow_stage, collected_facts, missing_fields, planning, outline, sections, active_rule_ids, active_reference_ids, version_count, generated_title, generated_content, review_state, pending_change, updated_at'
     )
     .single();
 

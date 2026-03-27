@@ -5,9 +5,9 @@
 - [x] Execute Phase 03 Plan 02 and commit grounded provenance work atomically
 - [x] Execute Phase 03 Plan 03 and commit review freshness/export gate work atomically
 - [x] Verify Wave 2 outputs, write `03-02-SUMMARY.md` and `03-03-SUMMARY.md`
-- [ ] Execute Phase 03 Plan 04 and commit preview-first compare/accept work atomically
-- [ ] Run Phase 3 validation, update planning artifacts, and commit execution results
-- [ ] Record Phase 3 execution review notes
+- [x] Execute Phase 03 Plan 04 and commit preview-first compare/accept work atomically
+- [x] Run Phase 3 validation, update planning artifacts, and commit execution results
+- [x] Record Phase 3 execution review notes
 
 - [x] Create Phase 3 planning checklist and task breakdown for grounded drafting/review trust
 - [x] Generate executable `03-01` through `03-04` plan files with wave ordering, requirement coverage, and brownfield-safe file ownership
@@ -121,6 +121,18 @@
 - [x] 重新验证本地 dev 流程并补充 review 记录
 
 ## Review
+
+- Phase 3 execution completed on 2026-03-27 across plans `03-01` through `03-04`, closing TRUST-01 through TRUST-05 before any durable-operations work starts.
+- `03-04` finished the preview-first trust boundary: regenerate, revise, and restore now return pending candidates first, persist them in `drafts.pending_change`, and require explicit accept/reject before accepted content changes.
+- Phase 3 validation evidence:
+- `npm run test:phase-03:contracts`
+- `node --experimental-strip-types --test tests/phase-03/telemetry/trust-route-telemetry.test.ts`
+- `npm run build`
+- `npm run test:phase-03:e2e`
+- Execution issues closed during Phase 3 finish:
+- replaced exact `updated_at` equality checks with accepted-snapshot matching so local Supabase trigger rewrites do not produce false `STALE_CANDIDATE` failures
+- forced seeded Playwright proof to reseed on every run and use an isolated test port so browser validation cannot reuse stale local servers or mutated drafts
+- Next action after this closeout: plan Phase 04 durable execution and export hardening on top of the now-authoritative trust contracts.
 
 - Phase 3 planning completed on 2026-03-27 for `03-grounded-drafting-and-review-trust`.
 - Executable plan set written under `.planning/phases/03-grounded-drafting-and-review-trust/`:

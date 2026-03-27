@@ -37,6 +37,7 @@ export type DraftRow = {
   generated_title: string | null;
   generated_content: string | null;
   review_state?: Record<string, unknown> | null;
+  pending_change?: Record<string, unknown> | null;
   updated_at?: string;
 };
 
@@ -45,7 +46,7 @@ export type DraftWritePayload = Omit<DraftRow, 'id'> & {
 };
 
 export const DRAFT_RECORD_SELECT =
-  'id, user_id, doc_type, title, recipient, content, issuer, date, provider, contact_name, contact_phone, attachments, workflow_stage, collected_facts, missing_fields, planning, outline, sections, active_rule_ids, active_reference_ids, version_count, generated_title, generated_content, review_state, updated_at';
+  'id, user_id, doc_type, title, recipient, content, issuer, date, provider, contact_name, contact_phone, attachments, workflow_stage, collected_facts, missing_fields, planning, outline, sections, active_rule_ids, active_reference_ids, version_count, generated_title, generated_content, review_state, pending_change, updated_at';
 
 function normalizeText(value?: string) {
   return value && value.length > 0 ? value : null;
@@ -82,6 +83,7 @@ export function buildDraftWritePayload({
     generated_title: null,
     generated_content: null,
     review_state: null,
+    pending_change: null,
   };
 }
 
@@ -106,6 +108,7 @@ export function mergeProtectedDraftFields({
     generated_title: existingDraft.generated_title || null,
     generated_content: existingDraft.generated_content || null,
     review_state: existingDraft.review_state || null,
+    pending_change: existingDraft.pending_change || null,
   };
 }
 
@@ -134,6 +137,7 @@ export function toDraftResponse(draft: DraftRow) {
     generatedTitle: draft.generated_title || '',
     generatedContent: draft.generated_content || '',
     reviewState: draft.review_state || null,
+    pendingChange: draft.pending_change || null,
     updatedAt: draft.updated_at || null,
   };
 }

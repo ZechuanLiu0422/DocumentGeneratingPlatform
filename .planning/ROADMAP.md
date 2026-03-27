@@ -11,8 +11,8 @@ This brownfield roadmap hardens the existing drafting platform in the order the 
 - Decimal phases (2.1, 2.2): Urgent insertions after planning
 
 - [x] **Phase 1: Workflow Integrity Guardrails** - Make server-owned draft state and stage transitions authoritative.
-- [ ] **Phase 2: Verification and Telemetry Baseline** - Add automated safety rails and observability around workflow behavior.
-- [ ] **Phase 3: Grounded Drafting and Review Trust** - Make generated output reviewable, provenance-backed, and safer to accept.
+- [x] **Phase 2: Verification and Telemetry Baseline** - Add automated safety rails and observability around workflow behavior.
+- [x] **Phase 3: Grounded Drafting and Review Trust** - Make generated output reviewable, provenance-backed, and safer to accept.
 - [ ] **Phase 4: Durable Execution and Export Hardening** - Move fragile long-running work into resumable operational paths.
 - [ ] **Phase 5: Generate Workspace Decomposition** - Reduce generate-surface complexity and improve load performance without changing trusted behavior.
 
@@ -38,7 +38,7 @@ This brownfield roadmap hardens the existing drafting platform in the order the 
   2. Maintainer can run automated auth and RLS regression checks that demonstrate one user cannot read or mutate another user's drafting data.
   3. Maintainer can run a browser smoke test that exercises the core generate flow from loading a draft to review or export readiness.
   4. Operator can inspect structured telemetry for workflow errors, AI provider failures, and export performance without reproducing issues locally.
-**Plans**: TBD
+**Plans**: 4 complete (`02-01` contract-suite baseline, `02-02` local auth/RLS harness, `02-03` seeded browser smoke, `02-04` telemetry and health coverage)
 
 ### Phase 3: Grounded Drafting and Review Trust
 **Goal**: Users can review and refine AI-generated content with clear provenance, focused regeneration controls, and document-specific checks.
@@ -52,10 +52,10 @@ This brownfield roadmap hardens the existing drafting platform in the order the 
   5. User can regenerate or revise one section while keeping approved content in other sections unchanged.
 **Plans**: 4 plans
 Plans:
-- [ ] 03-01-PLAN.md — Trust contract and persistence foundation for provenance, review state, and compare payloads
-- [ ] 03-02-PLAN.md — Ground accepted draft sections in approved-source provenance and expose it in the existing workspace
-- [ ] 03-03-PLAN.md — Add document-type review packs, review freshness persistence, and export trust gating
-- [ ] 03-04-PLAN.md — Convert regenerate/revise/restore to compare-before-accept flows with section-scoped guarantees
+- [x] 03-01-PLAN.md — Trust contract and persistence foundation for provenance, review state, and compare payloads
+- [x] 03-02-PLAN.md — Ground accepted draft sections in approved-source provenance and expose it in the existing workspace
+- [x] 03-03-PLAN.md — Add document-type review packs, review freshness persistence, and export trust gating
+- [x] 03-04-PLAN.md — Convert regenerate/revise/restore to compare-before-accept flows with section-scoped guarantees
 **UI hint**: yes
 
 ### Phase 4: Durable Execution and Export Hardening
@@ -85,7 +85,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Workflow Integrity Guardrails | 4/4 | Complete | 2026-03-26 |
-| 2. Verification and Telemetry Baseline | 1/4 | In Progress|  |
-| 3. Grounded Drafting and Review Trust | 0/TBD | Not started | - |
+| 2. Verification and Telemetry Baseline | 4/4 | Complete | 2026-03-27 |
+| 3. Grounded Drafting and Review Trust | 4/4 | Complete | 2026-03-27 |
 | 4. Durable Execution and Export Hardening | 0/TBD | Not started | - |
 | 5. Generate Workspace Decomposition | 0/TBD | Not started | - |

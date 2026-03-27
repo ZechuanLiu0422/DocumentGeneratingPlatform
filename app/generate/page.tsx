@@ -1,7 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { buildDraftSaveRequest, deriveHydratedDraftView, type ReviewState as PersistedReviewState } from '@/lib/generate-workspace';
+import {
+  buildDraftSaveRequest,
+  deriveHydratedDraftView,
+  type PendingChange as PersistedPendingChange,
+  type ReviewState as PersistedReviewState,
+} from '@/lib/generate-workspace';
 
 type Phrase = {
   id: string;
@@ -77,6 +82,7 @@ type ReviewCheck = {
 };
 
 type ReviewState = PersistedReviewState;
+type PendingChange = PersistedPendingChange;
 
 type VersionItem = {
   id: string;
@@ -162,6 +168,7 @@ type Draft = {
   generatedTitle: string;
   generatedContent: string;
   reviewState?: ReviewState | null;
+  pendingChange?: PendingChange | null;
 };
 
 const MAX_PLANNING_SECTIONS = 8;
@@ -192,6 +199,27 @@ function statusClass(status: ReviewCheck['status']) {
   if (status === 'pass') return 'bg-green-50 text-green-700 border-green-200';
   if (status === 'warning') return 'bg-yellow-50 text-yellow-700 border-yellow-200';
   return 'bg-red-50 text-red-700 border-red-200';
+}
+
+function mapWorkflowStageToStep(stage: WorkflowStage) {
+  if (stage === 'review' || stage === 'done') return 'review';
+  return stage;
+}
+
+function getPendingActionLabel(action: PendingChange['action']) {
+  if (action === 'regenerate') return '段落重生成';
+  if (action === 'revise') return '改写';
+  return '版本恢复';
+}
+
+function getPendingTargetLabel(targetType: PendingChange['targetType']) {
+  if (targetType === 'selection') return '选中文本';
+  if (targetType === 'section') return '指定段落';
+  return '整稿';
+}
+
+function findSectionById(sections: DraftSection[], sectionId: string) {
+  return sections.find((section) => section.id === sectionId) || null;
 }
 
 function renderSectionProvenance(section: DraftSection, emptyMessage = '当前段落还没有可展示的采纳依据。') {
@@ -327,6 +355,7 @@ function GeneratePageContent() {
   const [sectionInstructions, setSectionInstructions] = useState<Record<string, string>>({});
   const [reviewChecks, setReviewChecks] = useState<ReviewCheck[]>([]);
   const [reviewState, setReviewState] = useState<ReviewState | null>(null);
+  const [pendingChange, setPendingChange] = useState<PendingChange | null>(null);
   const [reviewGateMessage, setReviewGateMessage] = useState('');
   const [versions, setVersions] = useState<VersionItem[]>([]);
   const [busyAction, setBusyAction] = useState('');
@@ -370,6 +399,7 @@ function GeneratePageContent() {
     setOutlineRisks(hydratedView.outlineRisks);
     setSections(hydratedView.sections);
     setReviewState(hydratedView.reviewState);
+    setPendingChange(hydratedView.pendingChange);
   };
 
   const fetchVersions = async (draftId: string) => {
@@ -509,6 +539,7 @@ function GeneratePageContent() {
     setSectionInstructions({});
     setReviewChecks([]);
     setReviewState(null);
+    setPendingChange(null);
     setReviewGateMessage('');
     setVersions([]);
     setSessionReferences([]);
@@ -1002,8 +1033,15 @@ function GeneratePageContent() {
         throw new Error(data.error || '正文生成失败');
       }
 
+      if (data.mode === 'preview' && data.candidate) {
+        setPendingChange(data.candidate);
+        setReviewGateMessage('存在待确认的候选变更，请先比较后再决定是否覆盖当前已接受正文。');
+        return;
+      }
+
       setSections(data.sections || []);
       setReviewState(null);
+      setPendingChange(null);
       setReviewGateMessage('正文已更新，请重新运行定稿检查后再导出。');
       if (data.title) {
         setFormData((prev) => ({ ...prev, title: data.title }));
@@ -1064,9 +1102,16 @@ function GeneratePageContent() {
         throw new Error(data.error || '改写失败');
       }
 
+      if (data.mode === 'preview' && data.candidate) {
+        setPendingChange(data.candidate);
+        setReviewGateMessage('存在待确认的改写候选，请先比较后再决定是否接受。');
+        return;
+      }
+
       setSections(data.updatedSections || []);
-      setReviewState(null);
-      setReviewGateMessage('正文已修改，请重新运行定稿检查后再导出。');
+      setReviewState(data.reviewState || null);
+      setPendingChange(null);
+      setReviewGateMessage(data.reviewState ? '' : '正文已修改，请重新运行定稿检查后再导出。');
       if (data.title) {
         setFormData((prev) => ({ ...prev, title: data.title }));
       }
@@ -1126,6 +1171,8 @@ function GeneratePageContent() {
   const handleRestoreVersion = async (versionId: string) => {
     if (!currentDraftId) return;
 
+    setBusyAction(`restore-${versionId}`);
+
     const response = await fetch('/api/ai/versions/restore', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1135,15 +1182,119 @@ function GeneratePageContent() {
       }),
     });
     const data = await response.json();
-    if (!response.ok) {
-      alert(data.error || '版本恢复失败');
+    try {
+      if (!response.ok) {
+        throw new Error(data.error || '版本恢复失败');
+      }
+
+      if (data.mode === 'preview' && data.candidate) {
+        setPendingChange(data.candidate);
+        setReviewGateMessage('存在待确认的版本恢复候选，请先比较后再决定是否恢复。');
+      }
+    } catch (error: any) {
+      alert(error.message || '版本恢复失败');
+    } finally {
+      setBusyAction('');
+    }
+  };
+
+  const handlePendingChangeDecision = async (decision: 'accept' | 'reject') => {
+    if (!currentDraftId || !pendingChange) {
       return;
     }
 
-    if (data.draft) {
-      hydrateDraft(data.draft);
-      setReviewGateMessage('');
-      fetchVersions(data.draft.id);
+    setBusyAction(`candidate-${decision}`);
+
+    try {
+      let response: Response;
+
+      if (pendingChange.action === 'restore') {
+        response = await fetch('/api/ai/versions/restore', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            draftId: currentDraftId,
+            decision,
+            candidateId: pendingChange.candidateId,
+          }),
+        });
+      } else if (pendingChange.action === 'regenerate') {
+        response = await fetch('/api/ai/draft', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            draftId: currentDraftId,
+            provider,
+            mode: 'section',
+            sectionId: pendingChange.targetSectionIds[0] || '',
+            decision,
+            candidateId: pendingChange.candidateId,
+            sessionReferences,
+          }),
+        });
+      } else {
+        response = await fetch('/api/ai/revise', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            draftId: currentDraftId,
+            provider,
+            targetType: pendingChange.targetType,
+            targetId: pendingChange.targetSectionIds[0] || '',
+            selectedText,
+            instruction: '',
+            decision,
+            candidateId: pendingChange.candidateId,
+            sessionReferences,
+          }),
+        });
+      }
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || '候选变更处理失败');
+      }
+
+      if (decision === 'reject') {
+        setPendingChange(null);
+        setReviewGateMessage('');
+        return;
+      }
+
+      const nextSections = data.sections || data.updatedSections || pendingChange.after.sections;
+      const nextTitle =
+        typeof data.title === 'string' ? data.title : pendingChange.after.title || formData.title;
+      const nextReviewState =
+        data.reviewState !== undefined
+          ? (data.reviewState as ReviewState | null)
+          : pendingChange.action === 'restore'
+            ? pendingChange.after.reviewState || null
+            : null;
+      const nextWorkflowStage = (data.workflowStage || (pendingChange.action === 'restore' ? 'draft' : 'review')) as WorkflowStage;
+
+      setSections(nextSections);
+      setFormData((prev) => ({ ...prev, title: nextTitle }));
+      setReviewChecks([]);
+      setReviewState(nextReviewState);
+      setPendingChange(null);
+      setWorkflowStage(nextWorkflowStage);
+      setCurrentStep(mapWorkflowStageToStep(nextWorkflowStage));
+      setReviewGateMessage(nextReviewState ? '' : '正文已更新，请重新运行定稿检查后再导出。');
+      setSelectedText('');
+
+      if (pendingChange.targetType === 'selection') {
+        setSelectionInstruction('');
+      } else if (pendingChange.targetType === 'full') {
+        setFullInstruction('');
+      } else if (pendingChange.targetSectionIds[0]) {
+        setSectionInstructions((prev) => ({ ...prev, [pendingChange.targetSectionIds[0]]: '' }));
+      }
+
+      await fetchVersions(currentDraftId);
+    } catch (error: any) {
+      alert(error.message || '候选变更处理失败');
+    } finally {
+      setBusyAction('');
     }
   };
 
@@ -1622,6 +1773,109 @@ function GeneratePageContent() {
               canVisitDraft={canVisitDraft}
               canVisitReview={canVisitReview}
             />
+
+            {pendingChange && (
+              <section
+                aria-label="候选变更对比"
+                data-testid="pending-change-panel"
+                className="rounded-2xl border border-blue-200 bg-blue-50 p-6 shadow-sm"
+              >
+                <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                  <div>
+                    <div className="text-lg font-bold text-blue-950">待确认候选变更</div>
+                    <div className="mt-2 text-sm text-blue-900">
+                      {getPendingActionLabel(pendingChange.action)} / {getPendingTargetLabel(pendingChange.targetType)}
+                    </div>
+                    <div className="mt-2 text-sm text-blue-800">
+                      {pendingChange.diffSummary || '请先核对前后差异，再决定是否接受。'}
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                      <span className="rounded-full bg-white px-3 py-1 text-blue-800">
+                        变化段落 {pendingChange.changedSectionIds.length}
+                      </span>
+                      <span className="rounded-full bg-white px-3 py-1 text-blue-800">
+                        未变化段落 {pendingChange.unchangedSectionIds.length}
+                      </span>
+                      {pendingChange.targetSectionIds.length > 0 && (
+                        <span className="rounded-full bg-white px-3 py-1 text-blue-800">
+                          目标 {pendingChange.targetSectionIds.join('、')}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-3">
+                    <button
+                      onClick={() => handlePendingChangeDecision('reject')}
+                      disabled={busy}
+                      className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:text-gray-400"
+                    >
+                      拒绝候选变更
+                    </button>
+                    <button
+                      onClick={() => handlePendingChangeDecision('accept')}
+                      disabled={busy}
+                      className="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700 disabled:bg-gray-400"
+                    >
+                      接受候选变更
+                    </button>
+                  </div>
+                </div>
+
+                {(pendingChange.before.title || pendingChange.after.title) &&
+                  pendingChange.before.title !== pendingChange.after.title && (
+                    <div className="mt-5 grid gap-4 xl:grid-cols-2">
+                      <div className="rounded-xl border border-white/80 bg-white p-4">
+                        <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">当前标题</div>
+                        <div className="mt-2 text-sm text-gray-800">{pendingChange.before.title || '未命名文稿'}</div>
+                      </div>
+                      <div className="rounded-xl border border-blue-200 bg-white p-4">
+                        <div className="text-xs font-semibold uppercase tracking-wide text-blue-700">候选标题</div>
+                        <div className="mt-2 text-sm text-gray-900">{pendingChange.after.title || '未命名文稿'}</div>
+                      </div>
+                    </div>
+                  )}
+
+                <div className="mt-5 space-y-4">
+                  {(pendingChange.changedSectionIds.length > 0
+                    ? pendingChange.changedSectionIds
+                    : ['__full__']
+                  ).map((sectionId) => {
+                    const beforeSection =
+                      sectionId === '__full__' ? null : findSectionById(pendingChange.before.sections, sectionId);
+                    const afterSection =
+                      sectionId === '__full__' ? null : findSectionById(pendingChange.after.sections, sectionId);
+
+                    return (
+                      <div key={sectionId} className="grid gap-4 xl:grid-cols-2">
+                        <div className="rounded-xl border border-white/80 bg-white p-4">
+                          <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">当前内容</div>
+                          {beforeSection && (
+                            <div className="mt-2 text-sm font-medium text-gray-900">
+                              {beforeSection.heading}
+                            </div>
+                          )}
+                          <div className="mt-2 whitespace-pre-wrap text-sm leading-7 text-gray-700">
+                            {beforeSection?.body || pendingChange.before.content || '当前内容为空'}
+                          </div>
+                        </div>
+                        <div className="rounded-xl border border-blue-200 bg-white p-4">
+                          <div className="text-xs font-semibold uppercase tracking-wide text-blue-700">候选内容</div>
+                          {afterSection && (
+                            <div className="mt-2 text-sm font-medium text-gray-900">
+                              {afterSection.heading}
+                            </div>
+                          )}
+                          <div className="mt-2 whitespace-pre-wrap text-sm leading-7 text-gray-900">
+                            {afterSection?.body || pendingChange.after.content || '候选内容为空'}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
 
             <div className="rounded-2xl bg-white p-6 shadow-sm">
               {currentStep === 'intake' && (

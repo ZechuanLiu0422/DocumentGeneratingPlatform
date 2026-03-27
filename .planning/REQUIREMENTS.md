@@ -15,17 +15,17 @@
 ### Verification and Safety
 
 - [x] **SAFE-01**: Maintainer can run automated tests for validation, persistence helpers, and workflow route contracts in CI
-- [ ] **SAFE-02**: Maintainer can run automated auth/RLS regression checks that prove one user cannot access or mutate another user's drafting data
-- [ ] **SAFE-03**: Maintainer can run at least one browser-level smoke test covering the core generate workflow from draft load to review/export readiness
-- [ ] **SAFE-04**: Operator can inspect structured error and performance telemetry for workflow stages, AI providers, and export failures
+- [x] **SAFE-02**: Maintainer can run automated auth/RLS regression checks that prove one user cannot access or mutate another user's drafting data
+- [x] **SAFE-03**: Maintainer can run at least one browser-level smoke test covering the core generate workflow from draft load to review/export readiness
+- [x] **SAFE-04**: Operator can inspect structured error and performance telemetry for workflow stages, AI providers, and export failures
 
 ### Grounded Drafting and Review
 
-- [ ] **TRUST-01**: User can generate draft content grounded in approved reference assets rather than generic model-only output
-- [ ] **TRUST-02**: User can inspect source provenance for generated sections during review
-- [ ] **TRUST-03**: User can run document-type-specific policy or compliance checks before export
-- [ ] **TRUST-04**: User can compare meaningful draft/version differences before accepting regenerated or restored content
-- [ ] **TRUST-05**: User can regenerate or revise a single section without losing approved content in other sections
+- [x] **TRUST-01**: User can generate draft content grounded in approved reference assets rather than generic model-only output
+- [x] **TRUST-02**: User can inspect source provenance for generated sections during review
+- [x] **TRUST-03**: User can run document-type-specific policy or compliance checks before export
+- [x] **TRUST-04**: User can compare meaningful draft/version differences before accepting regenerated or restored content
+- [x] **TRUST-05**: User can regenerate or revise a single section without losing approved content in other sections
 
 ### Durable Operations
 
@@ -76,14 +76,14 @@ Which phases cover which requirements. Updated during roadmap creation.
 | FLOW-03 | Phase 1 | Complete |
 | FLOW-04 | Phase 1 | Complete |
 | SAFE-01 | Phase 2 | Complete |
-| SAFE-02 | Phase 2 | Pending |
-| SAFE-03 | Phase 2 | Pending |
-| SAFE-04 | Phase 2 | Pending |
-| TRUST-01 | Phase 3 | Pending |
-| TRUST-02 | Phase 3 | Pending |
-| TRUST-03 | Phase 3 | Pending |
-| TRUST-04 | Phase 3 | Pending |
-| TRUST-05 | Phase 3 | Pending |
+| SAFE-02 | Phase 2 | Complete |
+| SAFE-03 | Phase 2 | Complete |
+| SAFE-04 | Phase 2 | Complete |
+| TRUST-01 | Phase 3 | Complete |
+| TRUST-02 | Phase 3 | Complete |
+| TRUST-03 | Phase 3 | Complete |
+| TRUST-04 | Phase 3 | Complete |
+| TRUST-05 | Phase 3 | Complete |
 | OPS-01 | Phase 4 | Pending |
 | OPS-02 | Phase 4 | Pending |
 | OPS-03 | Phase 4 | Pending |
@@ -98,4 +98,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-03-26*
-*Last updated: 2026-03-26 after Phase 1 execution*
+*Last updated: 2026-03-27 after Phase 3 execution*

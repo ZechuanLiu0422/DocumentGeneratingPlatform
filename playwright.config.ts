@@ -22,6 +22,8 @@ function readScenario(): Phase02Scenario {
 }
 
 const scenario = readScenario();
+const testBaseURL = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:32123';
+const testBasePort = new URL(testBaseURL).port || '32123';
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -36,7 +38,7 @@ export default defineConfig({
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,
   use: {
-    baseURL: scenario.baseURL,
+    baseURL: testBaseURL,
     storageState: STORAGE_STATE_PATH,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
@@ -52,9 +54,9 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'npm run start -- --hostname 127.0.0.1 --port 3000',
-    url: scenario.baseURL,
-    reuseExistingServer: !process.env.CI,
+    command: `npm run start -- --hostname 127.0.0.1 --port ${testBasePort}`,
+    url: testBaseURL,
+    reuseExistingServer: false,
     timeout: 120_000,
     env: {
       ...process.env,

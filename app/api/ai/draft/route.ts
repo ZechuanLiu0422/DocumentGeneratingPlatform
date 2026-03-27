@@ -7,13 +7,38 @@ import { generateDraftWorkflow, regenerateSectionWorkflow } from '@/lib/official
 import { enforceDailyQuota, recordUsageEvent } from '@/lib/quota';
 import { enforceRateLimit } from '@/lib/ratelimit';
 import { draftRequestSchema } from '@/lib/validation';
+import {
+  buildChangeCandidatePreview,
+  buildPendingChangeState,
+  doesDraftMatchPendingChangeBase,
+  isPendingChangeExpired,
+} from '@/lib/version-restore';
 import { getAuthoritativeWorkflowStage } from '@/lib/workflow-stage';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
 
+function requireMatchingPendingChange(draft: Awaited<ReturnType<typeof getDraftById>>, userId: string, candidateId: string) {
+  const pendingChange = draft.pending_change;
+
+  if (!pendingChange || pendingChange.candidateId !== candidateId || pendingChange.action !== 'regenerate') {
+    throw new AppError(404, '候选变更不存在，请重新生成预览。', 'CANDIDATE_NOT_FOUND');
+  }
+
+  if (
+    pendingChange.userId !== userId ||
+    isPendingChangeExpired(pendingChange) ||
+    !doesDraftMatchPendingChangeBase(draft, pendingChange)
+  ) {
+    throw new AppError(409, '候选变更已过期或草稿已变化，请重新生成预览。', 'STALE_CANDIDATE');
+  }
+
+  return pendingChange;
+}
+
 export async function POST(request: NextRequest) {
   const context = createRequestContext(request, '/api/ai/draft');
+  let shouldRecordFailureUsage = false;
 
   try {
     const { supabase, user } = await requireRouteUser();
@@ -23,12 +48,113 @@ export async function POST(request: NextRequest) {
     context.draft_id = body.draftId;
     context.workflow_action = 'draft';
 
-    enforceRateLimit(`draft:${user.id}`, 10, 60 * 1000, '正文生成过于频繁，请稍后再试');
-    await enforceDailyQuota(supabase, user.id, 'draft');
-
     const draft = await getDraftById(supabase, user.id, body.draftId);
     context.doc_type = draft.doc_type;
     context.workflow_stage = draft.workflow_stage;
+
+    if (body.mode === 'section' && body.decision !== 'preview') {
+      const pendingChange = requireMatchingPendingChange(draft, user.id, body.candidateId!);
+
+      if (body.decision === 'reject') {
+        await saveDraftState(supabase, {
+          userId: user.id,
+          draftId: draft.id,
+          docType: draft.doc_type,
+          provider: draft.provider,
+          baseFields: {
+            title: draft.title || '',
+            recipient: draft.recipient || '',
+            content: draft.content || '',
+            issuer: draft.issuer || '',
+            date: draft.date || '',
+            contact_name: draft.contact_name || '',
+            contact_phone: draft.contact_phone || '',
+            attachments: draft.attachments,
+          },
+          workflow: {
+            workflow_stage: draft.workflow_stage,
+            collected_facts: draft.collected_facts,
+            missing_fields: draft.missing_fields,
+            planning: draft.planning,
+            outline: draft.outline,
+            sections: draft.sections,
+            active_rule_ids: draft.active_rule_ids,
+            active_reference_ids: draft.active_reference_ids,
+            generated_title: draft.generated_title || draft.title || '',
+            generated_content: draft.generated_content || '',
+            review_state: draft.review_state || null,
+            pending_change: null,
+            version_count: draft.version_count,
+          },
+        });
+
+        return ok(context, {
+          mode: 'reject',
+          candidateId: pendingChange.candidateId,
+          candidateCleared: true,
+        });
+      }
+
+      const workflowStage = getAuthoritativeWorkflowStage('draft_generated');
+      await saveDraftState(supabase, {
+        userId: user.id,
+        draftId: draft.id,
+        docType: draft.doc_type,
+        provider: draft.provider,
+        baseFields: {
+          title: pendingChange.after.title || draft.title || '',
+          recipient: draft.recipient || '',
+          content: draft.content || '',
+          issuer: draft.issuer || '',
+          date: draft.date || '',
+          contact_name: draft.contact_name || '',
+          contact_phone: draft.contact_phone || '',
+          attachments: draft.attachments,
+        },
+        workflow: {
+          workflow_stage: workflowStage,
+          collected_facts: draft.collected_facts,
+          missing_fields: draft.missing_fields,
+          planning: draft.planning,
+          outline: draft.outline,
+          sections: pendingChange.after.sections,
+          active_rule_ids: draft.active_rule_ids,
+          active_reference_ids: draft.active_reference_ids,
+          generated_title: pendingChange.after.title || draft.generated_title || draft.title || '',
+          generated_content: pendingChange.after.content || '',
+          review_state: pendingChange.after.reviewState || null,
+          pending_change: null,
+          version_count: draft.version_count,
+        },
+      });
+
+      await createVersionSnapshot(supabase, {
+        userId: user.id,
+        draftId: draft.id,
+        stage: 'draft_generated',
+        title: pendingChange.after.title || draft.generated_title || draft.title || '',
+        content: pendingChange.after.content || '',
+        sections: pendingChange.after.sections,
+        reviewState: pendingChange.after.reviewState || null,
+        changeSummary: pendingChange.diffSummary || '已接受段落重生成候选',
+      });
+
+      context.workflow_stage = workflowStage;
+      return ok(context, {
+        mode: 'accept',
+        title: pendingChange.after.title || draft.generated_title || draft.title || '',
+        content: pendingChange.after.content || '',
+        sections: pendingChange.after.sections,
+        reviewState: pendingChange.after.reviewState || null,
+        workflowStage,
+        candidateCleared: true,
+      });
+    }
+
+    enforceRateLimit(`draft:${user.id}`, 10, 60 * 1000, '正文生成过于频繁，请稍后再试');
+    await enforceDailyQuota(supabase, user.id, 'draft');
+    shouldRecordFailureUsage = true;
+
     const outlineSections = draft.outline?.sections || [];
     const { rules, references } = await loadRuleAndReferenceContext({
       supabase,
@@ -71,6 +197,74 @@ export async function POST(request: NextRequest) {
     if (!hasGroundingContext && claimsGrounding) {
       throw new AppError(400, '当前没有已批准的依据材料，不能返回采纳依据。', 'GROUNDING_CONTEXT_REQUIRED');
     }
+
+    if (body.mode === 'section') {
+      const previewTimestamp = new Date().toISOString();
+      const candidate = buildChangeCandidatePreview({
+        action: 'regenerate',
+        targetType: 'section',
+        targetSectionIds: [body.sectionId],
+        beforeDraft: draft,
+        after: {
+          title: result.title,
+          content: result.content,
+          sections: result.sections,
+          reviewState: null,
+        },
+        diffSummary: '已生成段落重写候选，请确认是否接受',
+      });
+
+      await saveDraftState(supabase, {
+        userId: user.id,
+        draftId: draft.id,
+        docType: draft.doc_type,
+        provider: draft.provider,
+        baseFields: {
+          title: draft.title || '',
+          recipient: draft.recipient || '',
+          content: draft.content || '',
+          issuer: draft.issuer || '',
+          date: draft.date || '',
+          contact_name: draft.contact_name || '',
+          contact_phone: draft.contact_phone || '',
+          attachments: draft.attachments,
+        },
+        workflow: {
+          workflow_stage: draft.workflow_stage,
+          collected_facts: draft.collected_facts,
+          missing_fields: draft.missing_fields,
+          planning: draft.planning,
+          outline: draft.outline,
+          sections: draft.sections,
+          active_rule_ids: draft.active_rule_ids,
+          active_reference_ids: draft.active_reference_ids,
+          generated_title: draft.generated_title || draft.title || '',
+          generated_content: draft.generated_content || '',
+          review_state: draft.review_state || null,
+          pending_change: buildPendingChangeState({
+            candidate,
+            userId: user.id,
+            createdAt: previewTimestamp,
+            baseUpdatedAt: previewTimestamp,
+          }),
+          version_count: draft.version_count,
+        },
+        updatedAt: previewTimestamp,
+      });
+
+      await recordUsageEvent(supabase, {
+        userId: user.id,
+        action: 'draft',
+        provider: body.provider,
+        status: 'success',
+      });
+
+      return ok(context, {
+        mode: 'preview',
+        candidate,
+      });
+    }
+
     const workflowStage = getAuthoritativeWorkflowStage('draft_generated');
 
     await saveDraftState(supabase, {
@@ -99,6 +293,7 @@ export async function POST(request: NextRequest) {
         active_reference_ids: draft.active_reference_ids,
         generated_title: result.title,
         generated_content: result.content,
+        pending_change: null,
         version_count: draft.version_count,
       },
     });
@@ -110,7 +305,7 @@ export async function POST(request: NextRequest) {
       title: result.title,
       content: result.content,
       sections: result.sections,
-      changeSummary: body.mode === 'section' ? '已重写指定段落' : '已生成正文',
+      changeSummary: '已生成正文',
     });
 
     await recordUsageEvent(supabase, {
@@ -128,13 +323,15 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     try {
-      const { supabase, user } = await requireRouteUser();
-      await recordUsageEvent(supabase, {
-        userId: user.id,
-        action: 'draft',
-        provider: String(context.provider || ''),
-        status: 'failed',
-      });
+      if (shouldRecordFailureUsage) {
+        const { supabase, user } = await requireRouteUser();
+        await recordUsageEvent(supabase, {
+          userId: user.id,
+          action: 'draft',
+          provider: String(context.provider || ''),
+          status: 'failed',
+        });
+      }
     } catch {}
 
     return handleRouteError(error, context);
