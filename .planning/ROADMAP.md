@@ -50,7 +50,12 @@ This brownfield roadmap hardens the existing drafting platform in the order the 
   3. User can run document-type-specific policy or compliance checks before export and see actionable issues that need review.
   4. User can compare meaningful differences between versions or regenerated content before accepting a change.
   5. User can regenerate or revise one section while keeping approved content in other sections unchanged.
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 03-01-PLAN.md — Trust contract and persistence foundation for provenance, review state, and compare payloads
+- [ ] 03-02-PLAN.md — Ground accepted draft sections in approved-source provenance and expose it in the existing workspace
+- [ ] 03-03-PLAN.md — Add document-type review packs, review freshness persistence, and export trust gating
+- [ ] 03-04-PLAN.md — Convert regenerate/revise/restore to compare-before-accept flows with section-scoped guarantees
 **UI hint**: yes
 
 ### Phase 4: Durable Execution and Export Hardening

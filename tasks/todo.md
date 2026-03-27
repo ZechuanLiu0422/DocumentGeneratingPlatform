@@ -1,5 +1,15 @@
 # TODO
 
+- [x] Create Phase 3 planning checklist and task breakdown for grounded drafting/review trust
+- [x] Generate executable `03-01` through `03-04` plan files with wave ordering, requirement coverage, and brownfield-safe file ownership
+- [x] Write `03-VALIDATION.md` with route-contract, browser-proof, and provider-free core safety verification
+- [x] Verify the Phase 3 plan set against research constraints, explicit TRUST-04/TRUST-05 semantics, and current codebase boundaries
+- [x] Record Phase 3 planning review notes
+
+- [x] Research Phase 3 grounded drafting and review trust against the current brownfield stack
+- [x] Write `.planning/phases/03-grounded-drafting-and-review-trust/03-RESEARCH.md`
+- [x] Verify the Phase 3 research artifact covers TRUST-01 through TRUST-05 plus SAFE-03/SAFE-04 constraints
+
 - [x] Begin Phase 2 execution and complete Wave 1 plans
 - [x] Verify Wave 1 outputs and execute the dependent Wave 2 browser smoke plan
 - [x] Execute Phase 02 Plan 01 and commit contract-suite work atomically
@@ -102,6 +112,26 @@
 - [x] 重新验证本地 dev 流程并补充 review 记录
 
 ## Review
+
+- Phase 3 planning completed on 2026-03-27 for `03-grounded-drafting-and-review-trust`.
+- Executable plan set written under `.planning/phases/03-grounded-drafting-and-review-trust/`:
+- `03-01-PLAN.md` — trust contract and persistence foundation
+- `03-02-PLAN.md` — grounded draft provenance and narrow review UI
+- `03-03-PLAN.md` — document-type review packs plus export freshness gating
+- `03-04-PLAN.md` — compare-before-accept flows with section-scoped guarantees
+- `03-VALIDATION.md` — provider-free Node/route contracts plus seeded browser proof strategy
+- Wave structure:
+- Wave 1: `03-01`
+- Wave 2: `03-02`, `03-03`
+- Wave 3: `03-04`
+- Validation outcome:
+- `gsd-tools` frontmatter validation passed for all four plans
+- `gsd-tools verify plan-structure` passed for all four plans with no errors or warnings
+- Research constraints preserved in the plan set:
+- no broad `/generate` decomposition in Phase 3
+- Phase 2 node:test, telemetry, and seeded Playwright patterns reused instead of introducing new frameworks
+- TRUST-04 compare/accept semantics and TRUST-05 section-scoped unchanged-section guarantees are explicit route contracts, not implied UI behavior
+- core safety verification stays provider-free; browser proof reuses the seeded restore/compare path instead of paid-provider calls
 
 - Phase 2 execution completed on 2026-03-27 across plans `02-01` through `02-04`, closing SAFE-01 through SAFE-04 before any larger brownfield refactor work.
 - SAFE-03 now has a deterministic local Playwright smoke built on the shared Phase 2 seed harness; it logs in as `phase2.alice@example.com`, opens `/generate?draft=8e274be8-48e6-4065-9b9b-6f8435b6878b`, and proves review/export readiness without live provider calls.
