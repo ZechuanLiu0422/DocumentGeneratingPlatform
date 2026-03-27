@@ -7,9 +7,36 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, '../../..');
 
-type SourceRefOverrides = Partial<ReturnType<typeof buildSectionSourceRef>>;
-type ReviewStateOverrides = Partial<ReturnType<typeof buildReviewState>>;
-type TrustedSectionOverrides = Partial<ReturnType<typeof buildTrustedSection>>;
+type SourceRefOverrides = Partial<{
+  sourceType: 'reference_asset' | 'session_reference' | 'writing_rule';
+  sourceId: string;
+  label: string;
+  excerpt: string;
+  reason: string;
+}>;
+
+type ReviewStateOverrides = Partial<{
+  content_hash: string;
+  doc_type: 'notice' | 'letter' | 'request' | 'report';
+  status: 'pass' | 'warning' | 'fail';
+  ran_at: string;
+  checks: Array<{
+    code: string;
+    status: 'pass' | 'warning' | 'fail';
+    message: string;
+    fixPrompt: string;
+  }>;
+}>;
+
+type TrustedSectionOverrides = Partial<{
+  id: string;
+  heading: string;
+  body: string;
+  provenance: {
+    summary: string;
+    sources: Array<ReturnType<typeof buildSectionSourceRef>>;
+  } | null;
+}>;
 
 export function buildSectionSourceRef(overrides: SourceRefOverrides = {}) {
   return {

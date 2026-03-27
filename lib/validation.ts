@@ -411,9 +411,26 @@ export const versionRestoreSchema = z.object({
 
 export type SectionSourceRef = z.infer<typeof sectionSourceRefSchema>;
 export type SectionProvenance = z.infer<typeof sectionProvenanceSchema>;
-export type TrustedDraftSection = z.infer<typeof trustedDraftSectionSchema>;
+export type TrustedDraftSection = z.infer<typeof draftSectionSchema> & {
+  provenance?: SectionProvenance | null;
+};
 export type ReviewState = z.infer<typeof reviewStateSchema>;
 export type ChangeCandidateTargetType = z.infer<typeof changeCandidateTargetTypeSchema>;
 export type ChangeCandidateAction = z.infer<typeof changeCandidateActionSchema>;
-export type ChangeCandidateSnapshot = z.infer<typeof changeCandidateSnapshotSchema>;
-export type ChangeCandidatePreview = z.infer<typeof changeCandidatePreviewSchema>;
+export type ChangeCandidateSnapshot = {
+  title?: string | null;
+  content?: string | null;
+  sections: TrustedDraftSection[];
+  reviewState?: ReviewState | null;
+};
+export type ChangeCandidatePreview = {
+  candidateId: string;
+  action: ChangeCandidateAction;
+  targetType: ChangeCandidateTargetType;
+  targetSectionIds: string[];
+  changedSectionIds: string[];
+  unchangedSectionIds: string[];
+  before: ChangeCandidateSnapshot;
+  after: ChangeCandidateSnapshot;
+  diffSummary?: string;
+};

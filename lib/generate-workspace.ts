@@ -28,6 +28,16 @@ export type DraftSection = {
   id: string;
   heading: string;
   body: string;
+  provenance?: {
+    summary?: string;
+    sources: Array<{
+      sourceType: 'reference_asset' | 'session_reference' | 'writing_rule';
+      sourceId?: string;
+      label: string;
+      excerpt: string;
+      reason?: string;
+    }>;
+  } | null;
 };
 
 export type DraftSnapshot = {

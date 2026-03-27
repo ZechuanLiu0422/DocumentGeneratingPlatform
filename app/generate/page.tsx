@@ -57,6 +57,16 @@ type DraftSection = {
   id: string;
   heading: string;
   body: string;
+  provenance?: {
+    summary?: string;
+    sources: Array<{
+      sourceType: 'reference_asset' | 'session_reference' | 'writing_rule';
+      sourceId?: string;
+      label: string;
+      excerpt: string;
+      reason?: string;
+    }>;
+  } | null;
 };
 
 type ReviewCheck = {
@@ -179,6 +189,32 @@ function statusClass(status: ReviewCheck['status']) {
   if (status === 'pass') return 'bg-green-50 text-green-700 border-green-200';
   if (status === 'warning') return 'bg-yellow-50 text-yellow-700 border-yellow-200';
   return 'bg-red-50 text-red-700 border-red-200';
+}
+
+function renderSectionProvenance(section: DraftSection, emptyMessage = '当前段落还没有可展示的采纳依据。') {
+  if (!section.provenance?.sources?.length) {
+    return (
+      <div className="mt-3 rounded-xl border border-dashed border-gray-200 px-3 py-3 text-sm text-gray-500">
+        {emptyMessage}
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-3">
+      <div className="text-xs font-semibold uppercase tracking-wide text-emerald-800">采纳依据</div>
+      {section.provenance.summary && <div className="mt-2 text-sm text-emerald-800">{section.provenance.summary}</div>}
+      <div className="mt-3 space-y-2">
+        {section.provenance.sources.map((source, index) => (
+          <div key={`${section.id}-${source.sourceId || source.label}-${index}`} className="rounded-lg bg-white px-3 py-2 text-sm text-gray-700">
+            <div className="font-medium text-gray-900">{source.label}</div>
+            <div className="mt-1 text-gray-600">{source.excerpt}</div>
+            {source.reason && <div className="mt-1 text-xs text-emerald-700">{source.reason}</div>}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function getIncompletePlanningSections(sections: PlanningSection[]) {
@@ -2102,6 +2138,7 @@ function GeneratePageContent() {
                                 AI 修改本段
                               </button>
                             </div>
+                            {renderSectionProvenance(section)}
                           </div>
                         ))}
                       </div>
@@ -2156,6 +2193,18 @@ function GeneratePageContent() {
                       </div>
                     )}
                   </div>
+
+                  <div className="rounded-xl border border-gray-200 p-4">
+                    <div className="text-sm font-medium">已采纳依据</div>
+                    <div className="mt-3 space-y-4">
+                      {sections.map((section) => (
+                        <div key={`review-provenance-${section.id}`}>
+                          <div className="text-sm font-medium text-gray-900">{section.heading}</div>
+                          {renderSectionProvenance(section, '本段当前没有可展示的采纳依据。')}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
@@ -2186,6 +2235,19 @@ function GeneratePageContent() {
                                 {line}
                               </p>
                             ))}
+                          {section.provenance?.sources?.length ? (
+                            <div className="mt-3 rounded-lg bg-gray-50 px-4 py-3 text-xs leading-6 text-gray-600">
+                              <div className="font-medium text-gray-700">来源依据</div>
+                              <div className="mt-2 space-y-2">
+                                {section.provenance.sources.map((source, index) => (
+                                  <div key={`${section.id}-preview-${source.sourceId || source.label}-${index}`}>
+                                    <span className="font-medium text-gray-800">{source.label}</span>
+                                    <span className="ml-2">{source.excerpt}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null}
                         </div>
                       ))}
                     </div>

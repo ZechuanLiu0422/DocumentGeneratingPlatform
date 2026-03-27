@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-03-26)
 ## Current Position
 
 Phase: 03 (grounded-drafting-and-review-trust) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 
 ## Performance Metrics
 
@@ -73,8 +73,8 @@ Recent decisions affecting current work:
 
 ### Pending Todos
 
-- Execute Wave 2 plans `03-02` and `03-03` sequentially because both modify `lib/official-document-workflow.ts`, `app/generate/page.tsx`, and related trust route boundaries.
-- Preserve the new Phase 3 trust contracts and JSONB storage when grounding draft provenance, review freshness, and preview-first compare flows.
+- Execute `03-03` next before touching `03-04`, because review freshness and export gating still share the same workflow/UI files modified by `03-02`.
+- Preserve the new provenance-bearing section contract and `review_state jsonb` storage when adding deterministic review freshness.
 
 ### Blockers/Concerns
 
@@ -84,9 +84,11 @@ Recent decisions affecting current work:
 ## Latest Completed Work
 
 - Completed Phase 03 Plan 01 on 2026-03-27.
+- Completed Phase 03 Plan 02 on 2026-03-27.
 - Added Phase 3 contract scripts, trust fixtures, and Phase 2-derived route helper wrappers under `tests/phase-03/contracts/`.
 - Extended validation, draft/version normalization, and restore helpers to carry optional provenance plus `review_state jsonb` contracts.
 - Added `supabase/migrations/20260327173000_phase_03_review_state_jsonb.sql` for explicit review freshness storage on `drafts` and `document_versions`.
+- Grounded full-draft and section rewrite outputs in selected evidence snippets, surfaced provenance in `/generate`, and aligned TypeScript with the repo’s explicit `.ts` import convention.
 
 ## Session Continuity
 

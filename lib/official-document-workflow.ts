@@ -3,7 +3,7 @@ import { AppError } from '@/lib/api';
 import { type DraftSectionRecord, type OutlineSectionRecord, type PlanningOptionRecord, type PlanningSectionRecord, type ReferenceAssetRecord, type WritingRuleRecord, compileSectionsToContent } from '@/lib/collaborative-store';
 import { DOC_TYPE_NAMES, callModel, sanitizeModelOutput, type AnalyzeResult } from '@/lib/official-document-ai';
 import type { Provider } from '@/lib/providers';
-import { draftSectionSchema, outlineSectionSchema, planningOptionSchema, planningSectionSchema, reviewCheckSchema } from '@/lib/validation';
+import { draftSectionSchema, outlineSectionSchema, planningOptionSchema, planningSectionSchema, reviewCheckSchema, type SectionSourceRef } from '@/lib/validation';
 
 type DocType = keyof typeof DOC_TYPE_NAMES;
 
@@ -263,6 +263,117 @@ function formatReferences(references: ReferenceAssetRecord[]) {
       return `- ${asset.name}（${asset.file_name}）：${analysis}`;
     })
     .join('\n');
+}
+
+function buildGroundingTerms(items: string[]) {
+  return Array.from(
+    new Set(
+      items
+        .flatMap((item) => item.split(/[\s，。；、：,\-]/))
+        .map((item) => item.trim())
+        .filter((item) => item.length >= 2)
+    )
+  ).slice(0, 8);
+}
+
+function scoreGroundingCandidate(text: string, terms: string[]) {
+  const haystack = normalizeCompareText(text);
+
+  return terms.reduce((score, term) => {
+    return score + (haystack.includes(normalizeCompareText(term)) ? 2 : 0);
+  }, 0);
+}
+
+function buildGroundedExcerpt(text: string, terms: string[]) {
+  const normalized = text.replace(/\s+/g, ' ').trim();
+  if (!normalized) {
+    return '';
+  }
+
+  const matchedTerm = terms.find((term) => normalized.includes(term));
+  if (!matchedTerm) {
+    return normalized.slice(0, 140);
+  }
+
+  const start = Math.max(0, normalized.indexOf(matchedTerm) - 20);
+  return normalized.slice(start, start + 140).trim();
+}
+
+function selectGroundedEvidenceSources(params: {
+  sectionHeading: string;
+  brief: DraftSectionBrief;
+  rules?: WritingRuleRecord[];
+  references?: ReferenceAssetRecord[];
+}): SectionSourceRef[] {
+  type RankedGroundedSource = {
+    score: number;
+    source: SectionSourceRef;
+  };
+
+  const terms = buildGroundingTerms([params.sectionHeading, params.brief.writingTask, ...params.brief.mustCover]);
+  const referenceSources: RankedGroundedSource[] = (params.references || [])
+    .map((asset) => {
+      const searchableText = [asset.name, asset.content, asset.analysis?.tone || '', asset.analysis?.structure || ''].join(' ');
+      const excerpt = buildGroundedExcerpt(asset.content, terms);
+
+      return {
+        score: scoreGroundingCandidate(searchableText, terms) + (asset.is_favorite ? 1 : 0),
+        source: {
+          sourceType: asset.id.startsWith('session-') ? ('session_reference' as const) : ('reference_asset' as const),
+          sourceId: asset.id,
+          label: asset.name,
+          excerpt,
+          reason: `支撑“${params.sectionHeading}”段落成文`,
+        },
+      };
+    })
+    .filter((candidate) => candidate.source.excerpt);
+
+  const ruleSources: RankedGroundedSource[] = (params.rules || [])
+    .map((rule) => ({
+      score: scoreGroundingCandidate([rule.name, rule.content].join(' '), terms),
+      source: {
+        sourceType: 'writing_rule' as const,
+        sourceId: rule.id,
+        label: rule.name,
+        excerpt: buildGroundedExcerpt(rule.content, terms),
+        reason: `约束“${params.sectionHeading}”段落口径`,
+      },
+    }))
+    .filter((candidate) => candidate.source.excerpt);
+
+  const selected: RankedGroundedSource[] = [...referenceSources.sort((left, right) => right.score - left.score).slice(0, 3)];
+
+  if (ruleSources.length > 0) {
+    selected.push(...ruleSources.sort((left, right) => right.score - left.score).slice(0, 1));
+  }
+
+  return selected.map((candidate) => candidate.source).slice(0, 4);
+}
+
+function attachSectionProvenance(params: {
+  section: DraftSectionRecord;
+  brief: DraftSectionBrief;
+  rules?: WritingRuleRecord[];
+  references?: ReferenceAssetRecord[];
+}) {
+  const sources = selectGroundedEvidenceSources({
+    sectionHeading: params.section.heading,
+    brief: params.brief,
+    rules: params.rules,
+    references: params.references,
+  });
+
+  return {
+    ...params.section,
+    provenance:
+      sources.length > 0
+        ? {
+            summary: `已采纳 ${sources.length} 条依据片段支撑本段。`,
+            sources,
+          }
+        : null,
+  } satisfies DraftSectionRecord;
 }
 
 function extractJsonCandidate(text: string) {
@@ -1142,7 +1253,14 @@ export async function generateDraftWorkflow(params: {
       const validationIssues = validateDraftSections(aiResult.sections, params.outlineSections);
 
       if (validationIssues.length === 0) {
-        const sections = normalizeDraftSections(aiResult.sections, params.outlineSections);
+        const sections = normalizeDraftSections(aiResult.sections, params.outlineSections).map((section, index) =>
+          attachSectionProvenance({
+            section,
+            brief: sectionBriefs[index],
+            rules: params.rules,
+            references: params.references,
+          })
+        );
         return {
           title: aiResult.title || desiredTitle,
           sections,
@@ -1228,7 +1346,17 @@ export async function regenerateSectionWorkflow(params: {
           id: targetOutline.id,
           heading: targetOutline.heading,
           body: aiResult.section.body.trim(),
-        };
+          provenance: attachSectionProvenance({
+            section: {
+              id: targetOutline.id,
+              heading: targetOutline.heading,
+              body: aiResult.section.body.trim(),
+            },
+            brief: targetBrief,
+            rules: params.rules,
+            references: params.references,
+          }).provenance,
+        } satisfies DraftSectionRecord;
         const updatedSections = params.currentSections.map((section) =>
           section.id === params.targetSectionId ? normalizedSection : section
         );

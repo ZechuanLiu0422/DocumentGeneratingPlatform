@@ -2,7 +2,7 @@
 
 - [x] Begin Phase 3 execution and complete Wave 1 plan `03-01`
 - [x] Verify Wave 1 outputs, write `03-01-SUMMARY.md`, and commit atomically
-- [ ] Execute Phase 03 Plan 02 and commit grounded provenance work atomically
+- [x] Execute Phase 03 Plan 02 and commit grounded provenance work atomically
 - [ ] Execute Phase 03 Plan 03 and commit review freshness/export gate work atomically
 - [ ] Verify Wave 2 outputs, write `03-02-SUMMARY.md` and `03-03-SUMMARY.md`
 - [ ] Execute Phase 03 Plan 04 and commit preview-first compare/accept work atomically

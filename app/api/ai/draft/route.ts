@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { createRequestContext, handleRouteError, ok } from '@/lib/api';
+import { AppError, createRequestContext, handleRouteError, ok } from '@/lib/api';
 import { requireRouteUser } from '@/lib/auth';
 import { loadRuleAndReferenceContext } from '@/lib/collaborative-route-helpers';
 import { createVersionSnapshot, getDraftById, saveDraftState } from '@/lib/collaborative-store';
@@ -62,8 +62,15 @@ export async function POST(request: NextRequest) {
             outlineSections,
             rules,
             references,
-          attachments: draft.attachments,
-        });
+            attachments: draft.attachments,
+          });
+
+    const hasGroundingContext = rules.length > 0 || references.length > 0;
+    const claimsGrounding = result.sections.some((section) => (section.provenance?.sources || []).length > 0);
+
+    if (!hasGroundingContext && claimsGrounding) {
+      throw new AppError(400, '当前没有已批准的依据材料，不能返回采纳依据。', 'GROUNDING_CONTEXT_REQUIRED');
+    }
     const workflowStage = getAuthoritativeWorkflowStage('draft_generated');
 
     await saveDraftState(supabase, {
