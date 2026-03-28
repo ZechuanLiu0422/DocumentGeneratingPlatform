@@ -208,10 +208,6 @@ type OperationStatusPayload = {
 
 const MAX_PLANNING_SECTIONS = 8;
 const OPERATION_STORAGE_PREFIX = 'draft-operation:';
-const editablePlanningFieldLabels = {
-  headingDraft: '段落标题',
-  topicSummary: '本段内容',
-} as const;
 
 const docTypes = [
   { id: 'notice', name: '通知', desc: '用于发布重要事项、安排工作等' },
@@ -416,22 +412,6 @@ function renderSectionProvenance(section: DraftSection, emptyMessage = '当前�
       </div>
     </div>
   );
-}
-
-function getIncompletePlanningSections(sections: PlanningSection[]) {
-  return sections
-    .map((section, index) => {
-      const missing = Object.entries(editablePlanningFieldLabels)
-        .filter(([field]) => !section[field as keyof PlanningSection].trim())
-        .map(([, label]) => label);
-
-      if (missing.length === 0) {
-        return '';
-      }
-
-      return `第 ${index + 1} 段缺少：${missing.join('、')}`;
-    })
-    .filter(Boolean);
 }
 
 function GeneratePageContent() {
@@ -704,24 +684,65 @@ function GeneratePageContent() {
   const controller = useGenerateWorkspaceController({
     readiness,
     planningOptions,
+    planningSections,
+    selectedPlanId,
     workflowStage,
     outlineSections,
+    outlineVersion,
+    outlineRisks,
+    titleOptions,
     sections,
     currentDraftId,
     busyAction,
     activeOperationStatus: activeOperation?.status ?? null,
     docType,
+    provider,
+    formData,
+    attachments,
+    intakeMessage,
+    activeRuleIds,
+    activeReferenceIds,
+    sessionReferences,
     rules,
     referenceAssets,
     onResetWorkflow: resetWorkflow,
+    onFetchVersions: fetchVersions,
     setDocType,
+    setCurrentDraftId,
+    setWorkflowStage,
+    setCurrentStep,
+    setCollectedFacts,
+    setMissingFields,
+    setNextQuestions,
+    setReadiness,
+    setIntakeMessage,
+    setBusyAction,
+    setFormData,
+    setPlanningVersion,
+    setPlanningOptions,
     setSelectedPlanId,
     setPlanningSections,
     setPlanningConfirmed,
+    setOutlineVersion,
+    setTitleOptions,
     setOutlineSections,
+    setOutlineRisks,
   });
 
-  const { busy, operationPending, canVisitPlanning, canVisitOutline, canVisitDraft, canVisitReview, visibleRules, visibleAssets } = controller;
+  const {
+    busy,
+    operationPending,
+    canVisitPlanning,
+    canVisitOutline,
+    canVisitDraft,
+    canVisitReview,
+    visibleRules,
+    visibleAssets,
+    handleIntake,
+    handleGeneratePlanning,
+    handleGenerateOutline,
+    handleConfirmOutline,
+  } = controller;
 
   const { bootstrapping, pageError } = useGenerateWorkspaceBootstrap({
     onHydrateDraft: hydrateDraft,
@@ -972,199 +993,6 @@ function GeneratePageContent() {
       setUploadingReference(false);
       event.target.value = '';
     }
-  };
-
-  const handleIntake = async () => {
-    if (!docType) {
-      alert('请先选择文种');
-      return;
-    }
-
-    setBusyAction('intake');
-
-    try {
-      const response = await fetch('/api/ai/intake', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          draftId: currentDraftId,
-          docType,
-          provider,
-          answers: {
-            title: formData.title,
-            recipient: formData.recipient,
-            content: formData.content,
-            issuer: formData.issuer,
-            date: formData.date,
-            contactName: formData.contactName,
-            contactPhone: formData.contactPhone,
-            attachments,
-          },
-          message: intakeMessage,
-          activeRuleIds,
-          activeReferenceIds,
-          sessionReferences,
-        }),
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || '信息采集失败');
-      }
-
-      setCurrentDraftId(data.draftId);
-      setCollectedFacts(data.collectedFacts || {});
-      setMissingFields(data.missingFields || []);
-      setNextQuestions(data.nextQuestions || []);
-      setReadiness(data.readiness || 'needs_more');
-      setWorkflowStage(data.workflowStage || (data.readiness === 'ready' ? 'planning' : 'intake'));
-      if (!formData.title && data.suggestedTitle) {
-        setFormData((prev) => ({ ...prev, title: data.suggestedTitle }));
-      }
-      if (data.readiness === 'ready') {
-        setCurrentStep('planning');
-      }
-      setIntakeMessage('');
-      fetchVersions(data.draftId);
-    } catch (error: any) {
-      alert(error.message || '信息采集失败');
-    } finally {
-      setBusyAction('');
-    }
-  };
-
-  const handleGeneratePlanning = async () => {
-    if (!currentDraftId) {
-      alert('请先完成一次 AI 信息采集');
-      return;
-    }
-
-    setBusyAction('planning');
-
-    try {
-      const response = await fetch('/api/ai/outline-plan', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          draftId: currentDraftId,
-          provider,
-          sessionReferences,
-        }),
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || '结构建议生成失败');
-      }
-
-      setPlanningVersion(data.planVersion || '');
-      setPlanningOptions(data.options || []);
-      if (data.options?.[0]) {
-        controller.selectPlanningOption(data.options[0]);
-      }
-      setWorkflowStage('planning');
-      setCurrentStep('planning');
-    } catch (error: any) {
-      alert(error.message || '结构建议生成失败');
-    } finally {
-      setBusyAction('');
-    }
-  };
-
-  const handleGenerateOutline = async (mode: 'direct' | 'fromPlan' = 'direct') => {
-    if (!currentDraftId) {
-      alert('请先完成一次 AI 信息采集');
-      return;
-    }
-
-    if (mode === 'fromPlan' && planningSections.length === 0) {
-      alert('请先确认结构方案');
-      return;
-    }
-
-    if (mode === 'fromPlan') {
-      if (planningSections.length > MAX_PLANNING_SECTIONS) {
-        alert(`结构共创最多支持 ${MAX_PLANNING_SECTIONS} 段，请先删减后再生成正式提纲`);
-        return;
-      }
-
-      const incompleteSections = getIncompletePlanningSections(planningSections);
-      if (incompleteSections.length > 0) {
-        alert(`请先补全结构共创中的段落信息：\n${incompleteSections.join('\n')}`);
-        return;
-      }
-    }
-
-    setBusyAction('outline');
-
-    try {
-      const response = await fetch('/api/ai/outline', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          draftId: currentDraftId,
-          provider,
-          confirmedPlan:
-            mode === 'fromPlan'
-              ? {
-                  selectedPlanId,
-                  sections: planningSections,
-                }
-              : null,
-          sessionReferences,
-        }),
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || '提纲生成失败');
-      }
-
-      setOutlineVersion(data.outlineVersion || '');
-      setTitleOptions(data.titleOptions || []);
-      setOutlineSections(data.outlineSections || []);
-      setOutlineRisks(data.risks || []);
-      if (!formData.title && data.titleOptions?.[0]) {
-        setFormData((prev) => ({ ...prev, title: data.titleOptions[0] }));
-      }
-      setWorkflowStage('outline');
-      setCurrentStep('outline');
-      if (mode === 'fromPlan') {
-        setPlanningConfirmed(true);
-      }
-    } catch (error: any) {
-      alert(error.message || '提纲生成失败');
-    } finally {
-      setBusyAction('');
-    }
-  };
-
-  const handleConfirmOutline = async () => {
-    if (!currentDraftId || outlineSections.length === 0) {
-      alert('请先生成提纲');
-      return;
-    }
-
-    const response = await fetch('/api/ai/outline/confirm', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        draftId: currentDraftId,
-        outlineVersion,
-        acceptedOutline: {
-          title: formData.title,
-          titleOptions,
-          sections: outlineSections,
-          risks: outlineRisks,
-        },
-      }),
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      alert(data.error || '提纲确认失败');
-      return;
-    }
-
-    setWorkflowStage('draft');
-    setCurrentStep('draft');
-    fetchVersions(currentDraftId);
   };
 
   const handleGenerateDraft = async (mode: 'full' | 'section' = 'full', sectionId = '') => {
@@ -1540,10 +1368,64 @@ function GeneratePageContent() {
       throw new Error('导出失败');
     } catch (error: any) {
       alert(error.message || '导出失败');
-    } finally {
+  } finally {
       setBusyAction('');
     }
   };
+
+  const primaryStagePanels = {
+    intake: (
+      <IntakeStage
+        collectedFacts={collectedFacts}
+        missingFields={missingFields}
+        nextQuestions={nextQuestions}
+        readiness={readiness}
+        intakeMessage={intakeMessage}
+        busy={busy}
+        providersAvailable={providers.length > 0}
+        busyAction={busyAction}
+        canVisitPlanning={canVisitPlanning}
+        formatFactValue={formatFactValue}
+        onIntakeMessageChange={setIntakeMessage}
+        onHandleIntake={handleIntake}
+        onGeneratePlanning={handleGeneratePlanning}
+        onGenerateOutline={() => handleGenerateOutline('direct')}
+      />
+    ),
+    planning: (
+      <PlanningStage
+        planningOptions={planningOptions}
+        selectedPlanId={selectedPlanId}
+        planningSections={planningSections}
+        busy={busy}
+        busyAction={busyAction}
+        maxPlanningSections={MAX_PLANNING_SECTIONS}
+        onGeneratePlanning={handleGeneratePlanning}
+        onGenerateOutlineDirect={() => handleGenerateOutline('direct')}
+        onGenerateOutlineFromPlan={() => handleGenerateOutline('fromPlan')}
+        onSelectPlanningOption={controller.selectPlanningOption}
+        onUpdatePlanningSections={controller.updatePlanningSections}
+      />
+    ),
+    outline: (
+      <OutlineStage
+        outlineSections={outlineSections}
+        outlineRisks={outlineRisks}
+        titleOptions={titleOptions}
+        selectedTitle={formData.title}
+        planningSections={planningSections}
+        busy={busy}
+        busyAction={busyAction}
+        onGenerateOutline={handleGenerateOutline}
+        onConfirmOutline={handleConfirmOutline}
+        onSetTitle={(title) => setFormData((prev) => ({ ...prev, title }))}
+        onSetOutlineSections={setOutlineSections}
+        onUpdateOutlineKeyPoints={controller.updateOutlineKeyPoints}
+      />
+    ),
+  } as const;
+
+  const primaryStagePanel = primaryStagePanels[currentStep as keyof typeof primaryStagePanels];
 
   return (
     <GenerateWorkspaceShell
@@ -2051,57 +1933,7 @@ function GeneratePageContent() {
             )}
 
             <div className="rounded-2xl bg-white p-6 shadow-sm">
-              {currentStep === 'intake' && (
-                <IntakeStage
-                  collectedFacts={collectedFacts}
-                  missingFields={missingFields}
-                  nextQuestions={nextQuestions}
-                  readiness={readiness}
-                  intakeMessage={intakeMessage}
-                  busy={busy}
-                  providersAvailable={providers.length > 0}
-                  busyAction={busyAction}
-                  canVisitPlanning={canVisitPlanning}
-                  formatFactValue={formatFactValue}
-                  onIntakeMessageChange={setIntakeMessage}
-                  onHandleIntake={handleIntake}
-                  onGeneratePlanning={handleGeneratePlanning}
-                  onGenerateOutline={() => handleGenerateOutline('direct')}
-                />
-              )}
-
-              {currentStep === 'planning' && (
-                <PlanningStage
-                  planningOptions={planningOptions}
-                  selectedPlanId={selectedPlanId}
-                  planningSections={planningSections}
-                  busy={busy}
-                  busyAction={busyAction}
-                  maxPlanningSections={MAX_PLANNING_SECTIONS}
-                  onGeneratePlanning={handleGeneratePlanning}
-                  onGenerateOutlineDirect={() => handleGenerateOutline('direct')}
-                  onGenerateOutlineFromPlan={() => handleGenerateOutline('fromPlan')}
-                  onSelectPlanningOption={controller.selectPlanningOption}
-                  onUpdatePlanningSections={controller.updatePlanningSections}
-                />
-              )}
-
-              {currentStep === 'outline' && (
-                <OutlineStage
-                  outlineSections={outlineSections}
-                  outlineRisks={outlineRisks}
-                  titleOptions={titleOptions}
-                  selectedTitle={formData.title}
-                  planningSections={planningSections}
-                  busy={busy}
-                  busyAction={busyAction}
-                  onGenerateOutline={handleGenerateOutline}
-                  onConfirmOutline={handleConfirmOutline}
-                  onSetTitle={(title) => setFormData((prev) => ({ ...prev, title }))}
-                  onSetOutlineSections={setOutlineSections}
-                  onUpdateOutlineKeyPoints={controller.updateOutlineKeyPoints}
-                />
-              )}
+              {primaryStagePanel}
 
               {currentStep === 'draft' && (
                 <div className="space-y-6">
