@@ -82,7 +82,11 @@ Plans:
   1. User can open the generate workspace and begin core drafting work before non-critical side-panel data finishes loading.
   2. Maintainer can change stage-specific UI behavior in isolated modules or hooks without editing one monolithic page file for every change.
   3. The generate experience preserves existing workflow behavior after the refactor because the UI now sits on already-tested server contracts.
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 05-01-PLAN.md — Shell/bootstrap split, controller foundation, and delayed-endpoint readiness proof
+- [ ] 05-02-PLAN.md — Intake/planning/outline module extraction on the shared controller boundary
+- [ ] 05-03-PLAN.md — Draft/review/sidebar extraction plus final deferred-loading verification
 **UI hint**: yes
 
 ## Progress
@@ -93,4 +97,4 @@ Plans:
 | 2. Verification and Telemetry Baseline | 4/4 | Complete | 2026-03-27 |
 | 3. Grounded Drafting and Review Trust | 4/4 | Complete | 2026-03-27 |
 | 4. Durable Execution and Export Hardening | 4/4 | Complete | 2026-03-28 |
-| 5. Generate Workspace Decomposition | 0/TBD | Not started | - |
+| 5. Generate Workspace Decomposition | 0/3 | Planned | - |

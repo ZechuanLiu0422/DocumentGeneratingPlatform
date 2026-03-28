@@ -1,5 +1,31 @@
 # TODO
 
+- [x] Create Phase 05 planning directory and initialize research/planning flow
+- [x] Run Phase 05 research for generate-workspace decomposition
+- [x] Generate executable PLAN.md files for Phase 05
+- [x] Verify Phase 05 plans with the local GSD validators and close structural blockers
+- [x] Record Phase 05 planning review notes and commit the resulting planning docs
+
+## Phase 05 Planning Review
+
+- Phase 05 planning completed on 2026-03-28 for generate workspace decomposition.
+- Final artifact set written under `.planning/phases/05-generate-workspace-decomposition`: `05-RESEARCH.md`, `05-VALIDATION.md`, `05-01-PLAN.md`, `05-02-PLAN.md`, `05-03-PLAN.md`.
+- Wave/dependency layout:
+- Wave 1: `05-01` shell/bootstrap split, controller foundation, and delayed-endpoint readiness proof.
+- Wave 2: `05-02` stage extraction for intake/planning/outline on top of the controller boundary.
+- Wave 3: `05-03` draft/review/sidebar extraction plus final Phase 5 verification.
+- Requirement coverage:
+- `UX-01` → `05-01`, `05-03`
+- `UX-02` → `05-01`, `05-02`, `05-03`
+- Verification evidence:
+- `node "$HOME/.codex/get-shit-done/bin/gsd-tools.cjs" frontmatter validate .planning/phases/05-generate-workspace-decomposition/05-01-PLAN.md --schema plan`
+- `node "$HOME/.codex/get-shit-done/bin/gsd-tools.cjs" verify plan-structure .planning/phases/05-generate-workspace-decomposition/05-01-PLAN.md`
+- `node "$HOME/.codex/get-shit-done/bin/gsd-tools.cjs" frontmatter validate .planning/phases/05-generate-workspace-decomposition/05-02-PLAN.md --schema plan`
+- `node "$HOME/.codex/get-shit-done/bin/gsd-tools.cjs" verify plan-structure .planning/phases/05-generate-workspace-decomposition/05-02-PLAN.md`
+- `node "$HOME/.codex/get-shit-done/bin/gsd-tools.cjs" frontmatter validate .planning/phases/05-generate-workspace-decomposition/05-03-PLAN.md --schema plan`
+- `node "$HOME/.codex/get-shit-done/bin/gsd-tools.cjs" verify plan-structure .planning/phases/05-generate-workspace-decomposition/05-03-PLAN.md`
+- Workflow note: both the `gsd-phase-researcher` and `gsd-planner` subagent runs stalled without producing artifacts, so the research and plan set were completed locally from repo evidence plus successful `gsd-tools` structural validation.
+
 - [x] Execute Phase 04 Plan 04 Task 1 with TDD red-green flow
 - [x] Verify Task 1 export download and artifact contract coverage and commit atomically
 - [x] Execute Phase 04 Plan 04 Task 2 with browser export polling/download updates

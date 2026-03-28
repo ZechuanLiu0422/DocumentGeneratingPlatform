@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Ready for Phase 05 Planning
-stopped_at: Completed Phase 04 execution
-last_updated: "2026-03-28T06:03:38.000Z"
+status: Ready for Phase 05 Execution
+stopped_at: Completed Phase 05 planning
+last_updated: "2026-03-28T06:32:00.000Z"
 progress:
   total_phases: 5
   completed_phases: 4
-  total_plans: 16
+  total_plans: 19
   completed_plans: 16
 ---
 
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-03-26)
 ## Current Position
 
 Phase: 05 (generate-workspace-decomposition) — NEXT
-Plan: Not started
+Plan: Planned (05-01, 05-02, 05-03)
 
 ## Performance Metrics
 
@@ -42,6 +42,7 @@ Plan: Not started
 | 02 | 4/4 | Complete |
 | 03 | 4/4 | Complete |
 | 04 | 4/4 | Complete |
+| 05 | 0/3 | Planned |
 
 **Recent Trend:**
 
@@ -78,15 +79,20 @@ Recent decisions affecting current work:
 
 ### Pending Todos
 
-- Plan Phase 05 generate workspace decomposition on top of the now-stable durable operation contracts.
-- Keep local durable-operation verification on the Supabase-backed seeded harness when Phase 05 touches `/generate`.
+- Execute Phase 05 plan 01 to split critical bootstrap from deferred panel loading and establish the workspace shell/controller boundary.
+- Keep Phase 05 verification on the seeded local Supabase + Playwright harness when `/generate` changes.
 
 ### Blockers/Concerns
 
 - Browser proof remains environment-sensitive because local verification depends on Docker-backed Supabase, CLI-readable local credentials, and a bindable local port.
-- `app/generate/page.tsx` is still monolithic; future work should avoid widening that file unless the change is directly required by a trust or operations contract.
+- `app/generate/page.tsx` remains monolithic until Phase 05 execution starts; each plan should reduce inline ownership rather than widening the file further.
 
 ## Latest Completed Work
+
+- Completed Phase 05 planning on 2026-03-28.
+- Wrote `05-RESEARCH.md`, `05-VALIDATION.md`, `05-01-PLAN.md`, `05-02-PLAN.md`, and `05-03-PLAN.md` for the generate workspace decomposition phase.
+- Verified all three Phase 05 plans with `gsd-tools` frontmatter validation and `verify plan-structure`, and confirmed requirement coverage for `UX-01` and `UX-02`.
+- Locked Phase 05 to structural decomposition plus deferred non-critical loading only; no redesign or backend workflow-contract changes are planned.
 
 - Completed Phase 04 Plan 04 on 2026-03-28.
 - Verified Phase 04 Plan 04 with `node --experimental-strip-types --experimental-test-module-mocks --test-concurrency=1 --test tests/phase-04/contracts/export-download-contract.test.ts tests/phase-04/ops/export-artifact-contract.test.ts tests/phase-04/ops/operation-idempotency.test.ts`, `npm run build`, and `npm run test:phase-04:e2e`.
@@ -111,6 +117,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-03-28T06:03:38Z
-Stopped at: Completed Phase 04 execution
+Last session: 2026-03-28T06:32:00Z
+Stopped at: Completed Phase 05 planning
 Resume file: None
