@@ -1,6 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { GenerateWorkspaceShell } from '@/app/generate/_components/GenerateWorkspaceShell';
+import { useGenerateWorkspaceBootstrap } from '@/app/generate/_hooks/useGenerateWorkspaceBootstrap';
+import { useGenerateWorkspaceController } from '@/app/generate/_hooks/useGenerateWorkspaceController';
 import {
   buildDraftSaveRequest,
   deriveHydratedDraftView,
@@ -467,8 +470,6 @@ function StageTabs(props: {
 }
 
 function GeneratePageContent() {
-  const [bootstrapping, setBootstrapping] = useState(true);
-  const [pageError, setPageError] = useState('');
   const [phrases, setPhrases] = useState<Phrase[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
@@ -532,12 +533,6 @@ function GeneratePageContent() {
   });
 
   const previewContent = compileSections(sections);
-  const canVisitPlanning = readiness === 'ready' || planningOptions.length > 0 || ['planning', 'outline', 'draft', 'review', 'done'].includes(workflowStage);
-  const canVisitOutline = outlineSections.length > 0 || ['outline', 'draft', 'review', 'done'].includes(workflowStage);
-  const canVisitDraft = outlineSections.length > 0 && currentDraftId !== null;
-  const canVisitReview = sections.length > 0;
-  const operationPending = activeOperation?.status === 'queued' || activeOperation?.status === 'running';
-  const busy = Boolean(busyAction) || operationPending;
 
   const hydrateDraft = (draft: Draft | Record<string, any>) => {
     const hydratedView = deriveHydratedDraftView(normalizeDraftSnapshot(draft as Record<string, any>));
@@ -599,82 +594,6 @@ function GeneratePageContent() {
       setPhrases(data.phrases || []);
     }
   };
-
-  useEffect(() => {
-    let mounted = true;
-
-    const bootstrap = async () => {
-      setBootstrapping(true);
-      setPageError('');
-
-      try {
-        const [settingsRes, phrasesRes, contactsRes, draftsRes, rulesRes, assetsRes] = await Promise.all([
-          fetch('/api/settings'),
-          fetch('/api/common-phrases'),
-          fetch('/api/contacts'),
-          fetch('/api/drafts'),
-          fetch('/api/writing-rules'),
-          fetch('/api/reference-assets'),
-        ]);
-
-        const [settingsData, phrasesData, contactsData, draftsData, rulesData, assetsData] = await Promise.all([
-          settingsRes.json(),
-          phrasesRes.json(),
-          contactsRes.json(),
-          draftsRes.json(),
-          rulesRes.json(),
-          assetsRes.json(),
-        ]);
-
-        if (!mounted) {
-          return;
-        }
-
-        if (!settingsRes.ok) {
-          setPageError(settingsData.error || '初始化失败');
-          return;
-        }
-
-        const supportedProviders = settingsData.supportedProviders || [];
-        setProviders(supportedProviders);
-        setPhrases(phrasesData.phrases || []);
-        setContacts(contactsData.contacts || []);
-        setRules(rulesData.rules || []);
-        setReferenceAssets(assetsData.assets || []);
-
-        const savedProvider = localStorage.getItem('lastUsedProvider');
-        const resolvedProvider =
-          supportedProviders.find((item: ProviderInfo) => item.id === savedProvider)?.id ||
-          supportedProviders[0]?.id ||
-          'claude';
-
-        setProvider(resolvedProvider);
-
-        const draftId = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('draft') : null;
-        if (draftId) {
-          const draft = (draftsData.drafts || []).find((item: Draft) => item.id === draftId);
-          if (draft) {
-            hydrateDraft(draft);
-            fetchVersions(draft.id);
-          }
-        }
-      } catch {
-        if (mounted) {
-          setPageError('初始化失败，请刷新后重试');
-        }
-      } finally {
-        if (mounted) {
-          setBootstrapping(false);
-        }
-      }
-    };
-
-    bootstrap();
-
-    return () => {
-      mounted = false;
-    };
-  }, []);
 
   useEffect(() => {
     if (!currentDraftId) {
@@ -817,34 +736,38 @@ function GeneratePageContent() {
     setActiveReferenceIds([]);
   };
 
-  const handleDocTypeChange = (value: Draft['doc_type'] | '') => {
-    setDocType(value);
-    resetWorkflow();
-  };
+  const controller = useGenerateWorkspaceController({
+    readiness,
+    planningOptions,
+    workflowStage,
+    outlineSections,
+    sections,
+    currentDraftId,
+    busyAction,
+    activeOperationStatus: activeOperation?.status ?? null,
+    docType,
+    rules,
+    referenceAssets,
+    onResetWorkflow: resetWorkflow,
+    setDocType,
+    setSelectedPlanId,
+    setPlanningSections,
+    setPlanningConfirmed,
+    setOutlineSections,
+  });
 
-  const updateOutlineKeyPoints = (sectionIndex: number, updater: (current: string[]) => string[]) => {
-    setOutlineSections((prev) =>
-      prev.map((item, current) =>
-        current === sectionIndex
-          ? {
-              ...item,
-              keyPoints: updater(item.keyPoints || []),
-            }
-          : item
-      )
-    );
-  };
+  const { busy, operationPending, canVisitPlanning, canVisitOutline, canVisitDraft, canVisitReview, visibleRules, visibleAssets } = controller;
 
-  const selectPlanningOption = (option: PlanningOption) => {
-    setSelectedPlanId(option.planId);
-    setPlanningSections(option.sections);
-    setPlanningConfirmed(false);
-  };
-
-  const updatePlanningSections = (updater: (current: PlanningSection[]) => PlanningSection[]) => {
-    setPlanningSections((prev) => updater(prev));
-    setPlanningConfirmed(false);
-  };
+  const { bootstrapping, pageError } = useGenerateWorkspaceBootstrap({
+    onHydrateDraft: hydrateDraft,
+    onSetProviders: (nextProviders) => setProviders(nextProviders as ProviderInfo[]),
+    onSetProvider: setProvider,
+    onSetPhrases: (nextPhrases) => setPhrases(nextPhrases as Phrase[]),
+    onSetContacts: (nextContacts) => setContacts(nextContacts as Contact[]),
+    onSetRules: (nextRules) => setRules(nextRules as WritingRule[]),
+    onSetReferenceAssets: (nextAssets) => setReferenceAssets(nextAssets as ReferenceAsset[]),
+    onFetchVersions: fetchVersions,
+  });
 
   const handleSaveDraft = async () => {
     if (!docType) {
@@ -1170,7 +1093,7 @@ function GeneratePageContent() {
       setPlanningVersion(data.planVersion || '');
       setPlanningOptions(data.options || []);
       if (data.options?.[0]) {
-        selectPlanningOption(data.options[0]);
+        controller.selectPlanningOption(data.options[0]);
       }
       setWorkflowStage('planning');
       setCurrentStep('planning');
@@ -1657,40 +1580,16 @@ function GeneratePageContent() {
     }
   };
 
-  const visibleRules = rules.filter((rule) => !docType || !rule.doc_type || rule.doc_type === docType);
-  const visibleAssets = referenceAssets.filter((asset) => !docType || !asset.doc_type || asset.doc_type === docType);
-
-  if (bootstrapping) {
-    return <div className="min-h-screen flex items-center justify-center">加载中...</div>;
-  }
-
   return (
-    <div className="min-h-screen bg-gray-50 p-6 xl:p-8">
-      <div className="mx-auto max-w-7xl space-y-6">
-        <div className="flex flex-col gap-4 rounded-2xl bg-white p-6 shadow-sm xl:flex-row xl:items-center xl:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold">AI 协作式公文工作台</h1>
-            <p className="mt-1 text-sm text-gray-500">先补齐事实，再确认提纲，再逐段成文，最后做定稿检查。</p>
-          </div>
-          <div className="flex flex-wrap gap-3 text-sm">
-            <button onClick={handleSaveDraft} className="rounded-lg border border-blue-200 px-4 py-2 text-blue-700 hover:bg-blue-50">
-              保存草稿
-            </button>
-            <button onClick={() => window.location.assign('/settings')} className="rounded-lg border border-gray-200 px-4 py-2 hover:bg-gray-50">
-              设置
-            </button>
-            <button onClick={() => window.location.assign('/')} className="rounded-lg border border-gray-200 px-4 py-2 hover:bg-gray-50">
-              返回首页
-            </button>
-            <button onClick={handleLogout} className="rounded-lg border border-gray-200 px-4 py-2 hover:bg-gray-50">
-              退出登录
-            </button>
-          </div>
-        </div>
-
-        {pageError && <div className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{pageError}</div>}
-
-        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[420px,1fr]">
+    <GenerateWorkspaceShell
+      bootstrapping={bootstrapping}
+      pageError={pageError}
+      onSaveDraft={handleSaveDraft}
+      onOpenSettings={() => window.location.assign('/settings')}
+      onGoHome={() => window.location.assign('/')}
+      onLogout={handleLogout}
+    >
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[420px,1fr]">
           <div className="space-y-6">
             <div className="rounded-2xl bg-white p-6 shadow-sm">
               <h2 className="text-lg font-bold">基础信息</h2>
@@ -1699,7 +1598,7 @@ function GeneratePageContent() {
                   <label className="mb-2 block text-sm font-medium">文种</label>
                   <select
                     value={docType}
-                    onChange={(event) => handleDocTypeChange(event.target.value as Draft['doc_type'] | '')}
+                    onChange={(event) => controller.handleDocTypeChange(event.target.value as Draft['doc_type'] | '')}
                     className="w-full rounded-lg border px-3 py-2"
                   >
                     <option value="">请选择文种</option>
@@ -2307,7 +2206,7 @@ function GeneratePageContent() {
                           <button
                             key={option.planId}
                             type="button"
-                            onClick={() => selectPlanningOption(option)}
+                            onClick={() => controller.selectPlanningOption(option)}
                             className={`rounded-2xl border p-5 text-left transition-colors ${
                               selectedPlanId === option.planId
                                 ? 'border-blue-500 bg-blue-50 shadow-sm'
@@ -2360,7 +2259,7 @@ function GeneratePageContent() {
                                   <button
                                     type="button"
                                     onClick={() =>
-                                      updatePlanningSections((current) => {
+                                      controller.updatePlanningSections((current) => {
                                         if (index === 0) return current;
                                         const next = [...current];
                                         [next[index - 1], next[index]] = [next[index], next[index - 1]];
@@ -2375,7 +2274,7 @@ function GeneratePageContent() {
                                   <button
                                     type="button"
                                     onClick={() =>
-                                      updatePlanningSections((current) => {
+                                      controller.updatePlanningSections((current) => {
                                         if (index === current.length - 1) return current;
                                         const next = [...current];
                                         [next[index], next[index + 1]] = [next[index + 1], next[index]];
@@ -2390,7 +2289,7 @@ function GeneratePageContent() {
                                   <button
                                     type="button"
                                     onClick={() =>
-                                      updatePlanningSections((current) => current.filter((_, currentIndex) => currentIndex !== index))
+                                      controller.updatePlanningSections((current) => current.filter((_, currentIndex) => currentIndex !== index))
                                     }
                                     className="rounded-lg border border-red-200 px-3 py-2 text-sm text-red-700 hover:bg-red-50"
                                   >
@@ -2405,7 +2304,7 @@ function GeneratePageContent() {
                                   <textarea
                                     value={section.headingDraft}
                                     onChange={(event) =>
-                                      updatePlanningSections((current) =>
+                                      controller.updatePlanningSections((current) =>
                                         current.map((item, currentIndex) =>
                                           currentIndex === index ? { ...item, headingDraft: event.target.value } : item
                                         )
@@ -2419,7 +2318,7 @@ function GeneratePageContent() {
                                   <textarea
                                     value={section.topicSummary}
                                     onChange={(event) =>
-                                      updatePlanningSections((current) =>
+                                      controller.updatePlanningSections((current) =>
                                         current.map((item, currentIndex) =>
                                           currentIndex === index ? { ...item, topicSummary: event.target.value } : item
                                         )
@@ -2455,7 +2354,7 @@ function GeneratePageContent() {
                         <button
                           type="button"
                           onClick={() =>
-                            updatePlanningSections((current) => [
+                            controller.updatePlanningSections((current) => [
                               ...current,
                               {
                                 id: `planning-${Date.now()}`,
@@ -2555,7 +2454,7 @@ function GeneratePageContent() {
                                 <label className="block text-sm font-medium">关键要点</label>
                                 <button
                                   type="button"
-                                  onClick={() => updateOutlineKeyPoints(index, (current) => [...current, ''])}
+                                  onClick={() => controller.updateOutlineKeyPoints(index, (current) => [...current, ''])}
                                   className="rounded-lg border border-blue-200 px-3 py-1.5 text-sm text-blue-700 hover:bg-blue-50"
                                 >
                                   新增一条
@@ -2571,7 +2470,7 @@ function GeneratePageContent() {
                                       type="text"
                                       value={point}
                                       onChange={(event) =>
-                                        updateOutlineKeyPoints(index, (current) => {
+                                        controller.updateOutlineKeyPoints(index, (current) => {
                                           const next = current.length > 0 ? [...current] : [''];
                                           next[pointIndex] = event.target.value;
                                           return next;
@@ -2583,7 +2482,7 @@ function GeneratePageContent() {
                                     <button
                                       type="button"
                                       onClick={() =>
-                                        updateOutlineKeyPoints(index, (current) =>
+                                        controller.updateOutlineKeyPoints(index, (current) =>
                                           current.filter((_, currentIndex) => currentIndex !== pointIndex)
                                         )
                                       }
@@ -2884,8 +2783,7 @@ function GeneratePageContent() {
             </div>
           </div>
         </div>
-      </div>
-    </div>
+    </GenerateWorkspaceShell>
   );
 }
 

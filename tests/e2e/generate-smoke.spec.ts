@@ -95,3 +95,34 @@ test('OPS-01 seeded export uses operation polling and binary download delivery',
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toMatch(/\.docx$/i);
 });
+
+test('UX-01 Phase 5 generate workspace becomes usable before deferred panel data resolves', async ({ page }) => {
+  const scenario = readScenario();
+  let delayedRulesPending = true;
+  let delayedAssetsPending = true;
+
+  await page.route('**/api/writing-rules', async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 3_000));
+    delayedRulesPending = false;
+    await route.continue();
+  });
+
+  await page.route('**/api/reference-assets', async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 3_000));
+    delayedAssetsPending = false;
+    await route.continue();
+  });
+
+  await page.goto(scenario.draft.generatePath, { waitUntil: 'domcontentloaded' });
+
+  await expect(page.getByRole('heading', { name: 'AI 协作式公文工作台' })).toBeVisible({ timeout: 1_500 });
+  await expect(page.getByRole('heading', { name: '定稿检查' })).toBeVisible({ timeout: 1_500 });
+  await expect(page.getByRole('button', { name: '下载 Word 定稿' })).toBeVisible({ timeout: 1_500 });
+  expect(delayedRulesPending).toBe(true);
+  expect(delayedAssetsPending).toBe(true);
+
+  await page.waitForResponse((response) => response.url().includes('/api/writing-rules') && response.ok());
+  await page.waitForResponse((response) => response.url().includes('/api/reference-assets') && response.ok());
+  await expect.poll(() => delayedRulesPending).toBe(false);
+  await expect.poll(() => delayedAssetsPending).toBe(false);
+});

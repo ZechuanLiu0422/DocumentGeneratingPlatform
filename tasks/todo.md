@@ -5,6 +5,22 @@
 - [x] Generate executable PLAN.md files for Phase 05
 - [x] Verify Phase 05 plans with the local GSD validators and close structural blockers
 - [x] Record Phase 05 planning review notes and commit the resulting planning docs
+- [x] Execute Phase 05 Plan 01 Task 1 with TDD red-green flow
+- [x] Verify Task 1 deferred-bootstrap contract coverage and commit atomically
+- [ ] Execute Phase 05 Plan 01 Task 2 with shell/controller bootstrap extraction
+- [ ] Verify Task 2 build plus delayed-endpoint browser proof, then commit atomically
+- [ ] Run Phase 05 Plan 01 verification, create `05-01-SUMMARY.md`, and update planning state artifacts
+- [ ] Execute Phase 05 Plan 02 Task 1 with TDD red-green flow
+- [ ] Verify Task 1 stage-module contract coverage and commit atomically
+- [ ] Execute Phase 05 Plan 02 Task 2 with controller-owned intake/planning/outline wiring
+- [ ] Verify Task 2 build and commit atomically
+- [ ] Run Phase 05 Plan 02 verification, create `05-02-SUMMARY.md`, and update planning state artifacts
+- [ ] Execute Phase 05 Plan 03 Task 1 with TDD red-green flow
+- [ ] Verify Task 1 draft/review/sidebar contract coverage and commit atomically
+- [ ] Execute Phase 05 Plan 03 Task 2 with deferred panel extraction and final verification wiring
+- [ ] Verify Task 2 full Phase 5 contract/build/browser coverage and commit atomically
+- [ ] Run Phase 05 verification, create `05-03-SUMMARY.md`, and update planning state artifacts
+- [ ] Record Phase 05 execution review notes
 
 ## Phase 05 Planning Review
 
@@ -25,6 +41,24 @@
 - `node "$HOME/.codex/get-shit-done/bin/gsd-tools.cjs" frontmatter validate .planning/phases/05-generate-workspace-decomposition/05-03-PLAN.md --schema plan`
 - `node "$HOME/.codex/get-shit-done/bin/gsd-tools.cjs" verify plan-structure .planning/phases/05-generate-workspace-decomposition/05-03-PLAN.md`
 - Workflow note: both the `gsd-phase-researcher` and `gsd-planner` subagent runs stalled without producing artifacts, so the research and plan set were completed locally from repo evidence plus successful `gsd-tools` structural validation.
+
+## Phase 05 Execution Review
+
+- Pending.
+
+## Phase 05 Plan 01 Execution Checklist
+
+- [ ] Task 1 RED: add Phase 5 contract test, delayed-endpoint browser scenario, and package scripts
+- [ ] Task 1 verify: `node --experimental-strip-types --experimental-test-module-mocks --test-concurrency=1 --test tests/phase-05/contracts/workspace-bootstrap-contract.test.ts`
+- [ ] Task 1 commit: Phase 5 verification harness
+- [ ] Task 2 implement: extract bootstrap/controller/shell boundaries and defer panel fetches
+- [ ] Task 2 verify: `node --experimental-strip-types --experimental-test-module-mocks --test-concurrency=1 --test tests/phase-05/contracts/workspace-bootstrap-contract.test.ts`
+- [ ] Task 2 verify: `npm run build`
+- [ ] Task 2 verify: `npm run test:phase-02:rls:reset`
+- [ ] Task 2 verify: `npm run test:phase-02:e2e:seed`
+- [ ] Task 2 verify: `playwright test --config=playwright.config.ts --project=chromium tests/e2e/generate-smoke.spec.ts --grep "UX-01|Phase 5"`
+- [ ] Task 2 commit: shell/controller bootstrap split
+- [ ] Closeout: create `05-01-SUMMARY.md`, run self-checks, and update planning state artifacts
 
 - [x] Execute Phase 04 Plan 04 Task 1 with TDD red-green flow
 - [x] Verify Task 1 export download and artifact contract coverage and commit atomically
