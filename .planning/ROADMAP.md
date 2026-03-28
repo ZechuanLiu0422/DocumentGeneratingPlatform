@@ -13,7 +13,7 @@ This brownfield roadmap hardens the existing drafting platform in the order the 
 - [x] **Phase 1: Workflow Integrity Guardrails** - Make server-owned draft state and stage transitions authoritative.
 - [x] **Phase 2: Verification and Telemetry Baseline** - Add automated safety rails and observability around workflow behavior.
 - [x] **Phase 3: Grounded Drafting and Review Trust** - Make generated output reviewable, provenance-backed, and safer to accept.
-- [ ] **Phase 4: Durable Execution and Export Hardening** - Move fragile long-running work into resumable operational paths.
+- [x] **Phase 4: Durable Execution and Export Hardening** - Move fragile long-running work into resumable operational paths.
 - [ ] **Phase 5: Generate Workspace Decomposition** - Reduce generate-surface complexity and improve load performance without changing trusted behavior.
 
 ## Phase Details
@@ -72,7 +72,7 @@ Plans:
 - [x] 04-01-PLAN.md — Durable-operation contracts, migration, and provider-free harness foundation
 - [x] 04-02-PLAN.md — Distributed limiter, lease/idempotency coordination, and autonomous runner drain path
 - [x] 04-03-PLAN.md — Async draft/revise route adoption plus status polling and telemetry
-- [ ] 04-04-PLAN.md — Export artifact storage, binary download route, and browser export hardening
+- [x] 04-04-PLAN.md — Export artifact storage, binary download route, and browser export hardening
 
 ### Phase 5: Generate Workspace Decomposition
 **Goal**: Users get a faster-loading generate workspace, and maintainers can evolve the stage UI through smaller, safer frontend modules.
@@ -92,5 +92,5 @@ Plans:
 | 1. Workflow Integrity Guardrails | 4/4 | Complete | 2026-03-26 |
 | 2. Verification and Telemetry Baseline | 4/4 | Complete | 2026-03-27 |
 | 3. Grounded Drafting and Review Trust | 4/4 | Complete | 2026-03-27 |
-| 4. Durable Execution and Export Hardening | 3/4 | In progress | - |
+| 4. Durable Execution and Export Hardening | 4/4 | Complete | 2026-03-28 |
 | 5. Generate Workspace Decomposition | 0/TBD | Not started | - |

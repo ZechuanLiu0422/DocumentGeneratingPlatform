@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Executing Phase 04
-stopped_at: Completed Phase 04 Plan 03 execution
-last_updated: "2026-03-28T04:59:28.000Z"
+status: Ready for Phase 05 Planning
+stopped_at: Completed Phase 04 execution
+last_updated: "2026-03-28T06:03:38.000Z"
 progress:
   total_phases: 5
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 16
-  completed_plans: 15
+  completed_plans: 16
 ---
 
 # Project State
@@ -19,20 +19,20 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-26)
 
 **Core value:** Users can turn incomplete inputs into a reliable, policy-aligned official document draft quickly without losing control of drafts, versions, or organizational writing context.
-**Current focus:** Phase 04 — durable-execution-and-export-hardening
+**Current focus:** Phase 05 — generate-workspace-decomposition
 
 ## Current Position
 
-Phase: 04 (durable-execution-and-export-hardening) — EXECUTING
-Plan: 4 of 4
+Phase: 05 (generate-workspace-decomposition) — NEXT
+Plan: Not started
 
 ## Performance Metrics
 
 **Execution Status:**
 
-- Total plans completed: 15
-- Completed phases: 01, 02, 03
-- Latest completed plan: `04-03`
+- Total plans completed: 16
+- Completed phases: 01, 02, 03, 04
+- Latest completed plan: `04-04`
 
 **By Phase:**
 
@@ -41,16 +41,17 @@ Plan: 4 of 4
 | 01 | 4/4 | Complete |
 | 02 | 4/4 | Complete |
 | 03 | 4/4 | Complete |
-| 04 | 3/4 | In Progress |
+| 04 | 4/4 | Complete |
 
 **Recent Trend:**
 
-- Phase 04 now has durable draft/revise operation handles, a browser-facing status read model, and refresh-safe polling on the existing generate workspace.
+- Phase 04 now has durable draft/revise/export operation handles, storage-backed binary export delivery, and local-stack-safe runner execution for verification.
 - Trend: Stable
 
 | Phase 04 P01 | 9m | 2 tasks | 8 files |
 | Phase 04 P02 | 13m | 2 tasks | 11 files |
 | Phase 04 P03 | 10m | 2 tasks | 14 files |
+| Phase 04 P04 | 64m | 2 tasks | 16 files |
 
 ## Accumulated Context
 
@@ -77,19 +78,22 @@ Recent decisions affecting current work:
 
 ### Pending Todos
 
-- Execute Phase 04 Plan 04 to move export onto the durable operation backbone and replace base64 JSON delivery with binary download retrieval.
-- Run the seeded browser export proof after the durable export route and download endpoint land.
+- Plan Phase 05 generate workspace decomposition on top of the now-stable durable operation contracts.
+- Keep local durable-operation verification on the Supabase-backed seeded harness when Phase 05 touches `/generate`.
 
 ### Blockers/Concerns
 
-- Browser proof remains environment-sensitive because local verification depends on Docker-backed Supabase plus a bindable local port.
+- Browser proof remains environment-sensitive because local verification depends on Docker-backed Supabase, CLI-readable local credentials, and a bindable local port.
 - `app/generate/page.tsx` is still monolithic; future work should avoid widening that file unless the change is directly required by a trust or operations contract.
 
 ## Latest Completed Work
 
-- Completed Phase 04 Plan 03 on 2026-03-28.
-- Verified Phase 04 Plan 03 with `npm run test:phase-04:contracts:async`, `node --experimental-strip-types --test tests/phase-04/contracts/operation-status-route-contract.test.ts tests/phase-04/telemetry/operation-route-telemetry.test.ts`, and `npm run build`.
-- Added durable draft/revise enqueue contracts, the `/api/operations/[id]` status read model, lifecycle telemetry for operation status reads, and narrow refresh-safe polling/resume wiring on `/generate`.
+- Completed Phase 04 Plan 04 on 2026-03-28.
+- Verified Phase 04 Plan 04 with `node --experimental-strip-types --experimental-test-module-mocks --test-concurrency=1 --test tests/phase-04/contracts/export-download-contract.test.ts tests/phase-04/ops/export-artifact-contract.test.ts tests/phase-04/ops/operation-idempotency.test.ts`, `npm run build`, and `npm run test:phase-04:e2e`.
+- Added storage-backed export artifact persistence, binary `/api/operations/[id]/download` delivery, local-stack-safe admin-key resolution for runner/download execution, and duplicate export idempotency reuse.
+- Completed Phase 04 execution on 2026-03-28.
+- Verified Phase 04 overall through the Phase 04 contract/ops suites, the final build, and the seeded browser export proof.
+- Closed OPS-01, OPS-02, OPS-03, and UX-03, making durable generation/export behavior authoritative before Phase 05 frontend decomposition starts.
 - Completed Phase 04 Plan 02 on 2026-03-28.
 - Verified Phase 04 Plan 02 with `node --experimental-strip-types --test tests/phase-04/ops/distributed-ratelimit.test.ts`, `npm run test:phase-04:ops:coordination`, and `npm run test:phase-04:ops`.
 - Added persistent rate-limit windows, lease-aware queue coordination, shared operation telemetry fields, and the protected `/api/operations/run` recovery path.
@@ -107,6 +111,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-03-27T16:56:25Z
-Stopped at: Completed Phase 03 execution
+Last session: 2026-03-28T06:03:38Z
+Stopped at: Completed Phase 04 execution
 Resume file: None

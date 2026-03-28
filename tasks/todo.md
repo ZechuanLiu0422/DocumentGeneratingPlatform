@@ -1,11 +1,11 @@
 # TODO
 
-- [ ] Execute Phase 04 Plan 04 Task 1 with TDD red-green flow
-- [ ] Verify Task 1 export download and artifact contract coverage and commit atomically
-- [ ] Execute Phase 04 Plan 04 Task 2 with browser export polling/download updates
-- [ ] Verify Task 2 build and seeded browser export proof, then commit atomically
-- [ ] Run Phase 04 Plan 04 verification, create `04-04-SUMMARY.md`, and update planning state artifacts
-- [ ] Record Phase 04 Plan 04 execution review notes
+- [x] Execute Phase 04 Plan 04 Task 1 with TDD red-green flow
+- [x] Verify Task 1 export download and artifact contract coverage and commit atomically
+- [x] Execute Phase 04 Plan 04 Task 2 with browser export polling/download updates
+- [x] Verify Task 2 build and seeded browser export proof, then commit atomically
+- [x] Run Phase 04 Plan 04 verification, create `04-04-SUMMARY.md`, and update planning state artifacts
+- [x] Record Phase 04 Plan 04 execution review notes
 
 - [x] Execute Phase 04 Plan 03 Task 1 with TDD red-green flow
 - [x] Verify Task 1 async draft/revise enqueue contract coverage and commit atomically
@@ -16,7 +16,10 @@
 
 ## Phase 04 Plan 04 Execution Review
 
-- Pending
+- Executed on 2026-03-28 with two TDD commits: export/download contract plus seeded browser coverage in `2f65cce`, then durable artifact delivery, local runner admin-key fallback, and idempotent operation reuse in `e25b7b9`.
+- Verification evidence: `node --experimental-strip-types --experimental-test-module-mocks --test-concurrency=1 --test tests/phase-04/contracts/export-download-contract.test.ts tests/phase-04/ops/export-artifact-contract.test.ts tests/phase-04/ops/operation-idempotency.test.ts`, `npm run build`, and `npm run test:phase-04:e2e`.
+- Outcome: export now queues onto the durable operation backbone, persists DOCX artifacts in Supabase storage, exposes a binary download endpoint, drains queued work against the local stack safely, and completes the seeded browser flow without base64 JSON decoding.
+- Execution note: closeout uncovered three brownfield gaps that had to be corrected in-flight: the Phase 02 seed used non-authoritative review hashes, local runner/download admin access needed a local-stack fallback instead of `.env.local` hosted credentials, and repeated export clicks needed duplicate idempotency-key reuse instead of surfacing a generic 500.
 
 ## Phase 04 Plan 03 Execution Review
 
