@@ -1,11 +1,10 @@
 import { NextRequest } from 'next/server';
 import { AppError, createRequestContext, handleRouteError, ok } from '@/lib/api';
 import { requireRouteUser } from '@/lib/auth';
-import { loadRuleAndReferenceContext } from '@/lib/collaborative-route-helpers';
 import { createVersionSnapshot, getDraftById, saveDraftState } from '@/lib/collaborative-store';
-import { generateDraftWorkflow, regenerateSectionWorkflow } from '@/lib/official-document-workflow';
+import { enforceDistributedRateLimit } from '@/lib/distributed-ratelimit';
+import { OPERATION_RUNNER_PATH, createDraftOperation, triggerOperationRunnerKick } from '@/lib/operation-store';
 import { enforceDailyQuota, recordUsageEvent } from '@/lib/quota';
-import { enforceRateLimit } from '@/lib/ratelimit';
 import { draftRequestSchema } from '@/lib/validation';
 import {
   buildChangeCandidatePreview,
@@ -151,176 +150,54 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    enforceRateLimit(`draft:${user.id}`, 10, 60 * 1000, '正文生成过于频繁，请稍后再试');
-    await enforceDailyQuota(supabase, user.id, 'draft');
-    shouldRecordFailureUsage = true;
-
-    const outlineSections = draft.outline?.sections || [];
-    const { rules, references } = await loadRuleAndReferenceContext({
+    await enforceDistributedRateLimit({
       supabase,
       userId: user.id,
-      provider: body.provider,
-      docType: draft.doc_type,
-      activeRuleIds: draft.active_rule_ids,
-      activeReferenceIds: draft.active_reference_ids,
-      sessionReferences: body.sessionReferences,
-    });
-
-    const result =
-      body.mode === 'section' && body.sectionId
-        ? await regenerateSectionWorkflow({
-            docType: draft.doc_type,
-            provider: body.provider,
-            facts: draft.collected_facts,
-            title: draft.generated_title || draft.title || '',
-            outlineSections,
-            currentSections: draft.sections,
-            targetSectionId: body.sectionId,
-            rules,
-            references,
-            attachments: draft.attachments,
-          })
-        : await generateDraftWorkflow({
-            docType: draft.doc_type,
-            provider: body.provider,
-            facts: draft.collected_facts,
-            title: draft.generated_title || draft.title || '',
-            outlineSections,
-            rules,
-            references,
-            attachments: draft.attachments,
-          });
-
-    const hasGroundingContext = rules.length > 0 || references.length > 0;
-    const claimsGrounding = result.sections.some((section) => (section.provenance?.sources || []).length > 0);
-
-    if (!hasGroundingContext && claimsGrounding) {
-      throw new AppError(400, '当前没有已批准的依据材料，不能返回采纳依据。', 'GROUNDING_CONTEXT_REQUIRED');
-    }
-
-    if (body.mode === 'section') {
-      const previewTimestamp = new Date().toISOString();
-      const candidate = buildChangeCandidatePreview({
-        action: 'regenerate',
-        targetType: 'section',
-        targetSectionIds: [body.sectionId],
-        beforeDraft: draft,
-        after: {
-          title: result.title,
-          content: result.content,
-          sections: result.sections,
-          reviewState: null,
-        },
-        diffSummary: '已生成段落重写候选，请确认是否接受',
-      });
-
-      await saveDraftState(supabase, {
-        userId: user.id,
-        draftId: draft.id,
-        docType: draft.doc_type,
-        provider: draft.provider,
-        baseFields: {
-          title: draft.title || '',
-          recipient: draft.recipient || '',
-          content: draft.content || '',
-          issuer: draft.issuer || '',
-          date: draft.date || '',
-          contact_name: draft.contact_name || '',
-          contact_phone: draft.contact_phone || '',
-          attachments: draft.attachments,
-        },
-        workflow: {
-          workflow_stage: draft.workflow_stage,
-          collected_facts: draft.collected_facts,
-          missing_fields: draft.missing_fields,
-          planning: draft.planning,
-          outline: draft.outline,
-          sections: draft.sections,
-          active_rule_ids: draft.active_rule_ids,
-          active_reference_ids: draft.active_reference_ids,
-          generated_title: draft.generated_title || draft.title || '',
-          generated_content: draft.generated_content || '',
-          review_state: draft.review_state || null,
-          pending_change: buildPendingChangeState({
-            candidate,
-            userId: user.id,
-            createdAt: previewTimestamp,
-            baseUpdatedAt: previewTimestamp,
-          }),
-          version_count: draft.version_count,
-        },
-        updatedAt: previewTimestamp,
-      });
-
-      await recordUsageEvent(supabase, {
-        userId: user.id,
-        action: 'draft',
-        provider: body.provider,
-        status: 'success',
-      });
-
-      return ok(context, {
-        mode: 'preview',
-        candidate,
-      });
-    }
-
-    const workflowStage = getAuthoritativeWorkflowStage('draft_generated');
-
-    await saveDraftState(supabase, {
-      userId: user.id,
-      draftId: draft.id,
-      docType: draft.doc_type,
-      provider: draft.provider,
-      baseFields: {
-        title: result.title || draft.title || '',
-        recipient: draft.recipient || '',
-        content: draft.content || '',
-        issuer: draft.issuer || '',
-        date: draft.date || '',
-        contact_name: draft.contact_name || '',
-        contact_phone: draft.contact_phone || '',
-        attachments: draft.attachments,
-      },
-      workflow: {
-        workflow_stage: workflowStage,
-        collected_facts: draft.collected_facts,
-        missing_fields: draft.missing_fields,
-        planning: draft.planning,
-        outline: draft.outline,
-        sections: result.sections,
-        active_rule_ids: draft.active_rule_ids,
-        active_reference_ids: draft.active_reference_ids,
-        generated_title: result.title,
-        generated_content: result.content,
-        pending_change: null,
-        version_count: draft.version_count,
-      },
-    });
-
-    await createVersionSnapshot(supabase, {
-      userId: user.id,
-      draftId: draft.id,
-      stage: 'draft_generated',
-      title: result.title,
-      content: result.content,
-      sections: result.sections,
-      changeSummary: '已生成正文',
-    });
-
-    await recordUsageEvent(supabase, {
-      userId: user.id,
       action: 'draft',
-      provider: body.provider,
-      status: 'success',
+      limit: 10,
+      windowMs: 60 * 1000,
+      message: '正文生成过于频繁，请稍后再试',
+    });
+    await enforceDailyQuota(supabase, user.id, 'draft');
+    shouldRecordFailureUsage = true;
+    const operation = await createDraftOperation(supabase, {
+      user_id: user.id,
+      draft_id: draft.id,
+      operation_type: body.mode === 'section' ? 'draft_regenerate' : 'draft_generate',
+      idempotency_key: `${body.mode === 'section' ? 'draft-regenerate' : 'draft-generate'}:${draft.id}:${crypto.randomUUID()}`,
+      payload: {
+        draftId: draft.id,
+        provider: body.provider,
+        mode: body.mode,
+        sectionId: body.sectionId,
+        sessionReferences: body.sessionReferences,
+      },
     });
 
-    context.workflow_stage = workflowStage;
-    return ok(context, {
-      title: result.title,
-      content: result.content,
-      sections: result.sections,
+    context.operation_id = operation.id;
+    context.operation_status = operation.status;
+    context.attempt_count = operation.attemptCount;
+
+    await triggerOperationRunnerKick({
+      origin: request.nextUrl.origin,
+      secret: process.env.OPERATION_RUNNER_SECRET,
     });
+
+    return ok(
+      context,
+      {
+        mode: 'queued',
+        operationId: operation.id,
+        status: operation.status,
+        pollUrl: `/api/operations/${operation.id}`,
+      },
+      202,
+      {
+        operation_id: operation.id,
+        operation_status: operation.status,
+        runner_path: OPERATION_RUNNER_PATH,
+      }
+    );
   } catch (error) {
     try {
       if (shouldRecordFailureUsage) {

@@ -1,7 +1,13 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { AppError } from '@/lib/api';
 import type { AnalyzeResult } from '@/lib/official-document-ai';
-import { buildRestoreResponse, buildRestoredSnapshot, mergeRestoredDraft } from '@/lib/version-restore';
+import {
+  buildChangeCandidatePreview,
+  buildPendingChangeState,
+  buildRestoreResponse,
+  buildRestoredSnapshot,
+  mergeRestoredDraft,
+} from '@/lib/version-restore';
 import { pendingChangeStateSchema } from '@/lib/validation';
 import type { PendingChangeState, ReviewState, SectionProvenance, TrustedDraftSection } from '@/lib/validation';
 
@@ -574,4 +580,147 @@ export async function saveDraftState(
   }
 
   return normalizeDraftRecord(data);
+}
+
+export async function persistFullDraftOperationResult(
+  supabase: SupabaseClient,
+  payload: {
+    userId: string;
+    draft: DraftRecord;
+    operationType?: 'draft_generate';
+    result: {
+      title: string;
+      content: string;
+      sections: DraftSectionRecord[];
+    };
+    workflowStage: DraftRecord['workflow_stage'];
+    changeSummary?: string;
+  }
+) {
+  await saveDraftState(supabase, {
+    userId: payload.userId,
+    draftId: payload.draft.id,
+    docType: payload.draft.doc_type,
+    provider: payload.draft.provider,
+    baseFields: {
+      title: payload.result.title || payload.draft.title || '',
+      recipient: payload.draft.recipient || '',
+      content: payload.draft.content || '',
+      issuer: payload.draft.issuer || '',
+      date: payload.draft.date || '',
+      contact_name: payload.draft.contact_name || '',
+      contact_phone: payload.draft.contact_phone || '',
+      attachments: payload.draft.attachments,
+    },
+    workflow: {
+      workflow_stage: payload.workflowStage,
+      collected_facts: payload.draft.collected_facts,
+      missing_fields: payload.draft.missing_fields,
+      planning: payload.draft.planning,
+      outline: payload.draft.outline,
+      sections: payload.result.sections,
+      active_rule_ids: payload.draft.active_rule_ids,
+      active_reference_ids: payload.draft.active_reference_ids,
+      generated_title: payload.result.title,
+      generated_content: payload.result.content,
+      review_state: null,
+      pending_change: null,
+      version_count: payload.draft.version_count,
+    },
+  });
+
+  await createVersionSnapshot(supabase, {
+    userId: payload.userId,
+    draftId: payload.draft.id,
+    stage: 'draft_generated',
+    title: payload.result.title,
+    content: payload.result.content,
+    sections: payload.result.sections,
+    reviewState: null,
+    changeSummary: payload.changeSummary || '已生成正文',
+  });
+
+  return {
+    title: payload.result.title,
+    content: payload.result.content,
+    sections: payload.result.sections,
+    workflowStage: payload.workflowStage,
+  };
+}
+
+export async function persistPendingChangeOperationResult(
+  supabase: SupabaseClient,
+  payload: {
+    userId: string;
+    draft: DraftRecord;
+    operationType: 'draft_regenerate' | 'draft_revise';
+    targetType: 'selection' | 'section' | 'full';
+    targetSectionIds: string[];
+    result: {
+      title: string;
+      content: string;
+      sections: DraftSectionRecord[];
+      changeSummary?: string;
+    };
+  }
+) {
+  const previewTimestamp = new Date().toISOString();
+  const candidate = buildChangeCandidatePreview({
+    action: payload.operationType === 'draft_regenerate' ? 'regenerate' : 'revise',
+    targetType: payload.targetType,
+    targetSectionIds: payload.targetSectionIds,
+    beforeDraft: payload.draft,
+    after: {
+      title: payload.result.title,
+      content: payload.result.content,
+      sections: payload.result.sections,
+      reviewState: null,
+    },
+    diffSummary:
+      payload.result.changeSummary ||
+      (payload.operationType === 'draft_regenerate' ? '已生成段落重写候选，请确认是否接受' : '已生成改写候选，请确认是否接受'),
+  });
+
+  await saveDraftState(supabase, {
+    userId: payload.userId,
+    draftId: payload.draft.id,
+    docType: payload.draft.doc_type,
+    provider: payload.draft.provider,
+    baseFields: {
+      title: payload.draft.title || '',
+      recipient: payload.draft.recipient || '',
+      content: payload.draft.content || '',
+      issuer: payload.draft.issuer || '',
+      date: payload.draft.date || '',
+      contact_name: payload.draft.contact_name || '',
+      contact_phone: payload.draft.contact_phone || '',
+      attachments: payload.draft.attachments,
+    },
+    workflow: {
+      workflow_stage: payload.draft.workflow_stage,
+      collected_facts: payload.draft.collected_facts,
+      missing_fields: payload.draft.missing_fields,
+      planning: payload.draft.planning,
+      outline: payload.draft.outline,
+      sections: payload.draft.sections,
+      active_rule_ids: payload.draft.active_rule_ids,
+      active_reference_ids: payload.draft.active_reference_ids,
+      generated_title: payload.draft.generated_title || payload.draft.title || '',
+      generated_content: payload.draft.generated_content || '',
+      review_state: payload.draft.review_state || null,
+      pending_change: buildPendingChangeState({
+        candidate,
+        userId: payload.userId,
+        createdAt: previewTimestamp,
+        baseUpdatedAt: previewTimestamp,
+      }),
+      version_count: payload.draft.version_count,
+    },
+    updatedAt: previewTimestamp,
+  });
+
+  return {
+    mode: 'preview',
+    candidate,
+  };
 }

@@ -41,13 +41,13 @@ type PlanningResult = {
   options: PlanningOptionRecord[];
 };
 
-type DraftResult = {
+export type DraftResult = {
   title: string;
   sections: DraftSectionRecord[];
   content: string;
 };
 
-type ReviseResult = {
+export type ReviseResult = {
   title?: string;
   updatedContent: string;
   updatedSections: DraftSectionRecord[];

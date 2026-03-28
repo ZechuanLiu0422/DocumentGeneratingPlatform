@@ -515,7 +515,15 @@ export async function drainOperationQueue(input: {
   now: OperationNowInput;
   leaseMs: number;
   maxOperations: number;
-  execute: (operation: DraftOperationReadModel) => Promise<Record<string, unknown>>;
+  execute: (
+    operation: DraftOperationReadModel
+  ) => Promise<
+    | Record<string, unknown>
+    | {
+        result: Record<string, unknown>;
+        onComplete?: () => Promise<void> | void;
+      }
+  >;
 }) {
   let claimed = 0;
   let completed = 0;
@@ -539,13 +547,22 @@ export async function drainOperationQueue(input: {
     claimed += 1;
 
     try {
-      const result = await input.execute(operation);
+      const executionResult = await input.execute(operation);
+      const normalizedResult =
+        executionResult &&
+        typeof executionResult === 'object' &&
+        'result' in executionResult &&
+        executionResult.result &&
+        typeof executionResult.result === 'object'
+          ? executionResult
+          : { result: executionResult as Record<string, unknown> };
       await markOperationSucceeded({
         store: input.store,
         operationId: operation.id,
         leaseToken: operation.leaseToken || '',
-        result,
+        result: normalizedResult.result,
         now: new Date(cycleNow.getTime() + 100),
+        onComplete: normalizedResult.onComplete,
       });
       completed += 1;
     } catch (error) {

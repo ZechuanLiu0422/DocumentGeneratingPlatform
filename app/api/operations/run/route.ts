@@ -8,6 +8,7 @@ import {
   OPERATION_RUNNER_PATH,
   OPERATION_RUNNER_SELF_KICK_HEADER,
 } from '@/lib/operation-store';
+import { prepareOperationExecution } from '@/lib/operation-runner';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -62,8 +63,11 @@ export async function POST(request: NextRequest) {
       now: new Date(),
       leaseMs: 60_000,
       maxOperations: 5,
-      execute: async () => {
-        throw new AppError(501, '操作执行器尚未接入具体任务分发', 'OPERATION_RUNNER_NOT_IMPLEMENTED');
+      execute: async (operation) => {
+        return prepareOperationExecution({
+          supabase,
+          operation,
+        });
       },
     });
 
