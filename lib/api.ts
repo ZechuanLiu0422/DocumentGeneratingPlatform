@@ -165,6 +165,10 @@ export function buildLogPayload(
     doc_type: pickContextValue(context, 'docType', 'doc_type'),
     workflow_action: pickContextValue(context, 'workflowAction', 'workflow_action'),
     workflow_stage: pickContextValue(context, 'workflowStage', 'workflow_stage'),
+    operation_id: pickContextValue(context, 'operationId', 'operation_id'),
+    operation_status: pickContextValue(context, 'operationStatus', 'operation_status'),
+    attempt_count: pickContextValue(context, 'attemptCount', 'attempt_count'),
+    lease_token: pickContextValue(context, 'leaseToken', 'lease_token'),
     ...normalizedExtra,
     provider_failure_kind: normalizedExtra.provider_failure_kind ?? providerFailureKind,
   };

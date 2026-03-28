@@ -13,6 +13,9 @@ import {
 const draftOperationSelect =
   'id, user_id, draft_id, operation_type, status, idempotency_key, payload, result, error_code, error_message, attempt_count, max_attempts, lease_token, lease_expires_at, last_heartbeat_at, started_at, completed_at, created_at, updated_at';
 
+export const OPERATION_RUNNER_PATH = '/api/operations/run';
+export const OPERATION_RUNNER_SELF_KICK_HEADER = 'x-operation-runner-self-kick';
+
 const allowedStatusTransitions: Record<DraftOperationStatus, DraftOperationStatus[]> = {
   queued: ['running', 'cancelled'],
   running: ['succeeded', 'failed', 'cancelled'],
@@ -20,6 +23,72 @@ const allowedStatusTransitions: Record<DraftOperationStatus, DraftOperationStatu
   failed: ['queued', 'cancelled'],
   cancelled: ['queued'],
 };
+
+export type OperationLeaseStore = {
+  listOperations: () => Promise<DraftOperationReadModel[]>;
+  getOperation: (operationId: string) => Promise<DraftOperationReadModel | null>;
+  compareAndSetOperation: (input: {
+    operationId: string;
+    expectedStatus?: DraftOperationStatus;
+    expectedUpdatedAt?: string;
+    expectedLeaseToken?: string | null;
+    patch: Partial<DraftOperationReadModel>;
+  }) => Promise<DraftOperationReadModel | null>;
+};
+
+type OperationNowInput = Date | string;
+
+function toIsoString(value: OperationNowInput) {
+  return value instanceof Date ? value.toISOString() : value;
+}
+
+function addLeaseWindow(now: OperationNowInput, leaseMs: number) {
+  const base = new Date(toIsoString(now));
+  return new Date(base.getTime() + leaseMs).toISOString();
+}
+
+function isLeaseExpired(operation: DraftOperationReadModel, now: OperationNowInput) {
+  if (!operation.leaseExpiresAt) {
+    return true;
+  }
+
+  return new Date(operation.leaseExpiresAt).getTime() <= new Date(toIsoString(now)).getTime();
+}
+
+function buildLeaseToken(runnerId: string) {
+  return `${runnerId}:${crypto.randomUUID()}`;
+}
+
+function createStaleLeaseError() {
+  return new AppError(409, '操作租约已过期或已被其他执行器接管', 'STALE_OPERATION_LEASE');
+}
+
+function sortClaimableOperations(operations: DraftOperationReadModel[]) {
+  return [...operations].sort((left, right) => {
+    const leftTime = new Date(left.createdAt).getTime();
+    const rightTime = new Date(right.createdAt).getTime();
+    return leftTime - rightTime;
+  });
+}
+
+function mapReadModelPatchToRowPatch(patch: Partial<DraftOperationReadModel>) {
+  const rowPatch: Record<string, unknown> = {};
+
+  if ('status' in patch) rowPatch.status = patch.status;
+  if ('result' in patch) rowPatch.result = patch.result;
+  if ('errorCode' in patch) rowPatch.error_code = patch.errorCode;
+  if ('errorMessage' in patch) rowPatch.error_message = patch.errorMessage;
+  if ('attemptCount' in patch) rowPatch.attempt_count = patch.attemptCount;
+  if ('maxAttempts' in patch) rowPatch.max_attempts = patch.maxAttempts;
+  if ('leaseToken' in patch) rowPatch.lease_token = patch.leaseToken;
+  if ('leaseExpiresAt' in patch) rowPatch.lease_expires_at = patch.leaseExpiresAt;
+  if ('lastHeartbeatAt' in patch) rowPatch.last_heartbeat_at = patch.lastHeartbeatAt;
+  if ('startedAt' in patch) rowPatch.started_at = patch.startedAt;
+  if ('completedAt' in patch) rowPatch.completed_at = patch.completedAt;
+  if ('updatedAt' in patch) rowPatch.updated_at = patch.updatedAt;
+
+  return rowPatch;
+}
 
 function toNullableString(value: unknown) {
   return typeof value === 'string' && value.length > 0 ? value : null;
@@ -64,6 +133,59 @@ export function normalizeDraftOperationRecord(row: unknown): DraftOperationReadM
   };
 
   return draftOperationReadModelSchema.parse(normalized);
+}
+
+export function createSupabaseOperationLeaseStore(supabase: SupabaseClient): OperationLeaseStore {
+  return {
+    async listOperations() {
+      const { data, error } = await supabase.from('draft_operations').select(draftOperationSelect).order('created_at');
+
+      if (error) {
+        throw error;
+      }
+
+      return (data || []).map((row) => normalizeDraftOperationRecord(row));
+    },
+    async getOperation(operationId: string) {
+      const { data, error } = await supabase
+        .from('draft_operations')
+        .select(draftOperationSelect)
+        .eq('id', operationId)
+        .maybeSingle();
+
+      if (error) {
+        throw error;
+      }
+
+      return data ? normalizeDraftOperationRecord(data) : null;
+    },
+    async compareAndSetOperation(input) {
+      let query = supabase.from('draft_operations').update(mapReadModelPatchToRowPatch(input.patch)).eq('id', input.operationId);
+
+      if (input.expectedStatus) {
+        query = query.eq('status', input.expectedStatus);
+      }
+
+      if (input.expectedUpdatedAt) {
+        query = query.eq('updated_at', input.expectedUpdatedAt);
+      }
+
+      if (input.expectedLeaseToken !== undefined) {
+        query =
+          input.expectedLeaseToken === null
+            ? query.is('lease_token', null)
+            : query.eq('lease_token', input.expectedLeaseToken);
+      }
+
+      const { data, error } = await query.select(draftOperationSelect).maybeSingle();
+
+      if (error) {
+        throw error;
+      }
+
+      return data ? normalizeDraftOperationRecord(data) : null;
+    },
+  };
 }
 
 function buildDraftOperationInsert(payload: DraftOperationInsert) {
@@ -215,4 +337,268 @@ export async function updateDraftOperationStatus(
   }
 
   return normalizeDraftOperationRecord(data);
+}
+
+export async function claimNextOperation(input: {
+  store: OperationLeaseStore;
+  runnerId: string;
+  now: OperationNowInput;
+  leaseMs: number;
+}) {
+  const nowIso = toIsoString(input.now);
+  const candidates = sortClaimableOperations(await input.store.listOperations()).filter(
+    (operation) => operation.status === 'queued' || (operation.status === 'running' && isLeaseExpired(operation, nowIso))
+  );
+
+  for (const candidate of candidates) {
+    const leaseToken = buildLeaseToken(input.runnerId);
+    const claimed = await input.store.compareAndSetOperation({
+      operationId: candidate.id,
+      expectedStatus: candidate.status,
+      expectedUpdatedAt: candidate.updatedAt,
+      expectedLeaseToken: candidate.status === 'running' ? candidate.leaseToken : undefined,
+      patch: {
+        status: 'running',
+        attemptCount: candidate.attemptCount + 1,
+        leaseToken,
+        leaseExpiresAt: addLeaseWindow(nowIso, input.leaseMs),
+        lastHeartbeatAt: nowIso,
+        startedAt: candidate.startedAt ?? nowIso,
+        completedAt: null,
+        updatedAt: nowIso,
+      },
+    });
+
+    if (claimed) {
+      return claimed;
+    }
+  }
+
+  return null;
+}
+
+export async function heartbeatOperation(input: {
+  store: OperationLeaseStore;
+  operationId: string;
+  leaseToken: string;
+  now: OperationNowInput;
+  leaseMs: number;
+}) {
+  const current = await input.store.getOperation(input.operationId);
+
+  if (!current || current.status !== 'running' || current.leaseToken !== input.leaseToken) {
+    throw createStaleLeaseError();
+  }
+
+  const nowIso = toIsoString(input.now);
+  const updated = await input.store.compareAndSetOperation({
+    operationId: input.operationId,
+    expectedStatus: 'running',
+    expectedUpdatedAt: current.updatedAt,
+    expectedLeaseToken: input.leaseToken,
+    patch: {
+      lastHeartbeatAt: nowIso,
+      leaseExpiresAt: addLeaseWindow(nowIso, input.leaseMs),
+      updatedAt: nowIso,
+    },
+  });
+
+  if (!updated) {
+    throw createStaleLeaseError();
+  }
+
+  return updated;
+}
+
+export async function markOperationSucceeded(input: {
+  store: OperationLeaseStore;
+  operationId: string;
+  leaseToken: string;
+  result: Record<string, unknown>;
+  now: OperationNowInput;
+  onComplete?: () => Promise<void> | void;
+}) {
+  const current = await input.store.getOperation(input.operationId);
+
+  if (!current) {
+    throw new AppError(404, '操作记录不存在', 'OPERATION_NOT_FOUND');
+  }
+
+  if (current.status === 'succeeded') {
+    return current;
+  }
+
+  if (current.status !== 'running' || current.leaseToken !== input.leaseToken) {
+    throw createStaleLeaseError();
+  }
+
+  await input.onComplete?.();
+
+  const nowIso = toIsoString(input.now);
+  const updated = await input.store.compareAndSetOperation({
+    operationId: input.operationId,
+    expectedStatus: 'running',
+    expectedUpdatedAt: current.updatedAt,
+    expectedLeaseToken: input.leaseToken,
+    patch: {
+      status: 'succeeded',
+      result: input.result,
+      errorCode: null,
+      errorMessage: null,
+      leaseToken: null,
+      leaseExpiresAt: null,
+      lastHeartbeatAt: nowIso,
+      completedAt: nowIso,
+      updatedAt: nowIso,
+    },
+  });
+
+  if (!updated) {
+    const latest = await input.store.getOperation(input.operationId);
+    if (latest?.status === 'succeeded') {
+      return latest;
+    }
+    throw createStaleLeaseError();
+  }
+
+  return updated;
+}
+
+export async function markOperationFailed(input: {
+  store: OperationLeaseStore;
+  operationId: string;
+  leaseToken: string;
+  errorCode: string;
+  errorMessage: string;
+  retryable: boolean;
+  now: OperationNowInput;
+}) {
+  const current = await input.store.getOperation(input.operationId);
+
+  if (!current) {
+    throw new AppError(404, '操作记录不存在', 'OPERATION_NOT_FOUND');
+  }
+
+  if (current.status !== 'running' || current.leaseToken !== input.leaseToken) {
+    throw createStaleLeaseError();
+  }
+
+  const nowIso = toIsoString(input.now);
+  const shouldRetry = input.retryable && current.attemptCount < current.maxAttempts;
+  const updated = await input.store.compareAndSetOperation({
+    operationId: input.operationId,
+    expectedStatus: 'running',
+    expectedUpdatedAt: current.updatedAt,
+    expectedLeaseToken: input.leaseToken,
+    patch: {
+      status: shouldRetry ? 'queued' : 'failed',
+      errorCode: input.errorCode,
+      errorMessage: input.errorMessage,
+      leaseToken: null,
+      leaseExpiresAt: null,
+      lastHeartbeatAt: nowIso,
+      completedAt: shouldRetry ? null : nowIso,
+      updatedAt: nowIso,
+    },
+  });
+
+  if (!updated) {
+    throw createStaleLeaseError();
+  }
+
+  return updated;
+}
+
+export async function drainOperationQueue(input: {
+  store: OperationLeaseStore;
+  runnerId: string;
+  now: OperationNowInput;
+  leaseMs: number;
+  maxOperations: number;
+  execute: (operation: DraftOperationReadModel) => Promise<Record<string, unknown>>;
+}) {
+  let claimed = 0;
+  let completed = 0;
+  let failed = 0;
+  let requeued = 0;
+  const baseNow = new Date(toIsoString(input.now)).getTime();
+
+  for (let index = 0; index < input.maxOperations; index += 1) {
+    const cycleNow = new Date(baseNow + index * 1000);
+    const operation = await claimNextOperation({
+      store: input.store,
+      runnerId: input.runnerId,
+      now: cycleNow,
+      leaseMs: input.leaseMs,
+    });
+
+    if (!operation) {
+      break;
+    }
+
+    claimed += 1;
+
+    try {
+      const result = await input.execute(operation);
+      await markOperationSucceeded({
+        store: input.store,
+        operationId: operation.id,
+        leaseToken: operation.leaseToken || '',
+        result,
+        now: new Date(cycleNow.getTime() + 100),
+      });
+      completed += 1;
+    } catch (error) {
+      const normalizedError =
+        error instanceof AppError
+          ? error
+          : new AppError(500, error instanceof Error ? error.message : '操作执行失败', 'OPERATION_RUN_FAILED');
+      const failedOperation = await markOperationFailed({
+        store: input.store,
+        operationId: operation.id,
+        leaseToken: operation.leaseToken || '',
+        errorCode: normalizedError.code,
+        errorMessage: normalizedError.message,
+        retryable: true,
+        now: new Date(cycleNow.getTime() + 100),
+      });
+
+      if (failedOperation.status === 'queued') {
+        requeued += 1;
+      } else {
+        failed += 1;
+      }
+    }
+  }
+
+  return { claimed, completed, failed, requeued };
+}
+
+export async function triggerOperationRunnerKick(input: {
+  origin: string;
+  secret?: string;
+  fetchImpl?: typeof fetch;
+}) {
+  if (!input.origin) {
+    return false;
+  }
+
+  const secret = input.secret;
+  if (!secret) {
+    return false;
+  }
+
+  try {
+    const response = await (input.fetchImpl ?? fetch)(new URL(OPERATION_RUNNER_PATH, input.origin), {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${secret}`,
+        [OPERATION_RUNNER_SELF_KICK_HEADER]: secret,
+      },
+    });
+
+    return response.ok;
+  } catch {
+    return false;
+  }
 }
