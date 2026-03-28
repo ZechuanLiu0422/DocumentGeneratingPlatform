@@ -81,3 +81,17 @@ test('TRUST-04 seeded restore candidate can be recreated and accepted', async ({
   await expect(page.getByTestId('pending-change-panel')).toHaveCount(0);
   await expect(page.getByText(scenario.draft.restoredSecondBody, { exact: true }).first()).toBeVisible();
 });
+
+test('OPS-01 seeded export uses operation polling and binary download delivery', async ({ page }) => {
+  const scenario = readScenario();
+
+  await page.goto(scenario.draft.generatePath, { waitUntil: 'networkidle' });
+  await page.getByRole('button', { name: '5. 定稿检查' }).click();
+  await expect(page.getByRole('heading', { name: '定稿检查' })).toBeVisible();
+
+  const downloadPromise = page.waitForEvent('download');
+  await page.getByRole('button', { name: '下载 Word 定稿' }).click();
+
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toMatch(/\.docx$/i);
+});

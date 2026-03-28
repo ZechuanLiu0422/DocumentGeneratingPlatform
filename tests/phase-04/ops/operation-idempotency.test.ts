@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildRunningOperationFixture } from '../contracts/shared-fixtures.ts';
+import { buildQueuedOperationFixture, buildRunningOperationFixture } from '../contracts/shared-fixtures.ts';
 import { importOperationProjectModule } from '../contracts/route-contract-helpers.ts';
 
 const BASE_NOW = new Date('2026-03-28T12:10:00.000Z');
@@ -126,6 +126,69 @@ test('operation completion is idempotent and only invokes the authoritative side
   assert.equal(secondCompletion.status, 'succeeded');
   assert.deepEqual(secondCompletion.result, { artifactId: 'artifact-01' });
   assert.equal(completionSideEffects, 1);
+});
+
+test('duplicate idempotency inserts reuse the existing durable operation instead of failing', async (t) => {
+  const operationStore = (await importOperationProjectModule(
+    t,
+    '../../../lib/operation-store.ts'
+  )) as Record<string, any>;
+
+  assert.equal(typeof operationStore.createDraftOperation, 'function');
+
+  const existing = buildQueuedOperationFixture();
+  const duplicateError = new Error('duplicate key value violates unique constraint "idx_draft_operations_user_idempotency"') as Error & {
+    code?: string;
+  };
+  duplicateError.code = '23505';
+
+  const supabase = {
+    from(table: string) {
+      assert.equal(table, 'draft_operations');
+
+      return {
+        insert() {
+          return {
+            select() {
+              return {
+                async single() {
+                  return {
+                    data: null,
+                    error: duplicateError,
+                  };
+                },
+              };
+            },
+          };
+        },
+        select() {
+          return {
+            eq(_column: string, _value: string) {
+              return this;
+            },
+            async single() {
+              return {
+                data: existing,
+                error: null,
+              };
+            },
+          };
+        },
+      };
+    },
+  };
+
+  const created = await operationStore.createDraftOperation(supabase as any, {
+    user_id: existing.user_id,
+    draft_id: existing.draft_id,
+    operation_type: existing.operation_type,
+    idempotency_key: existing.idempotency_key,
+    payload: existing.payload,
+  });
+
+  assert.equal(created.id, existing.id);
+  assert.equal(created.status, 'queued');
+  assert.equal(created.idempotencyKey, existing.idempotency_key);
 });
 
 test('retryable failures requeue work until max attempts are exhausted', async (t) => {

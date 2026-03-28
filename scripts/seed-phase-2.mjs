@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { createClient } from '@supabase/supabase-js';
@@ -58,6 +59,52 @@ export const PHASE_02_FIXTURES = {
 
 let cachedLocalSupabaseEnv = null;
 const E2E_SCENARIO_PATH = path.join(process.cwd(), '.tmp', 'phase-02-e2e.json');
+
+function compileSectionsToContent(sections) {
+  return sections
+    .map((section) => {
+      const heading = String(section.heading || '').trim();
+      const body = String(section.body || '').trim();
+      return heading ? `${heading}\n${body}`.trim() : body;
+    })
+    .filter(Boolean)
+    .join('\n\n');
+}
+
+function computeReviewContentHash({ title = '', content = '', sections = [] }) {
+  const payload = {
+    title: String(title).trim(),
+    content: String(content || compileSectionsToContent(sections)).trim(),
+    sections: sections.map((section) => ({
+      id: section.id,
+      heading: String(section.heading || '').trim(),
+      body: String(section.body || '').trim(),
+    })),
+  };
+
+  return `sha256:${createHash('sha256').update(JSON.stringify(payload)).digest('hex')}`;
+}
+
+function buildReviewState({ docType, title, content = '', sections, ranAt }) {
+  return {
+    content_hash: computeReviewContentHash({
+      title,
+      content,
+      sections,
+    }),
+    doc_type: docType,
+    status: 'pass',
+    ran_at: ranAt,
+    checks: [
+      {
+        code: 'notice_action_required',
+        status: 'pass',
+        message: '正文包含明确执行要求。',
+        fixPrompt: '',
+      },
+    ],
+  };
+}
 
 function parseEnvOutput(output) {
   return Object.fromEntries(
@@ -224,6 +271,7 @@ async function upsertSingle(admin, table, row, conflictTarget = 'id') {
 
 function buildDraftRow(userKey, userId) {
   const otherUserKey = userKey === 'alice' ? 'bob' : 'alice';
+  const generatedTitle = `${userKey} generated title`;
   const sections = [
     {
       id: `section-${userKey}-1`,
@@ -243,20 +291,12 @@ function buildDraftRow(userKey, userId) {
       body: '请于本周五前提交整改清单。',
     },
   ];
-  const reviewState = {
-    content_hash: `sha256:${userKey}-draft-review-hash`,
-    doc_type: 'notice',
-    status: 'pass',
-    ran_at: '2026-03-27T18:00:00.000Z',
-    checks: [
-      {
-        code: 'notice_action_required',
-        status: 'pass',
-        message: '正文包含明确执行要求。',
-        fixPrompt: '',
-      },
-    ],
-  };
+  const reviewState = buildReviewState({
+    docType: 'notice',
+    title: generatedTitle,
+    sections,
+    ranAt: '2026-03-27T18:00:00.000Z',
+  });
   const pendingChange =
     userKey === 'alice'
       ? {
@@ -273,13 +313,15 @@ function buildDraftRow(userKey, userId) {
             reviewState,
           },
           after: {
-            title: `${userKey} generated title`,
+            title: generatedTitle,
             content: `${restoredSections[0].heading}\n${restoredSections[0].body}\n\n${restoredSections[1].heading}\n${restoredSections[1].body}`,
             sections: restoredSections,
-            reviewState: {
-              ...reviewState,
-              content_hash: `sha256:${userKey}-restored-review-hash`,
-            },
+            reviewState: buildReviewState({
+              docType: 'notice',
+              title: generatedTitle,
+              sections: restoredSections,
+              ranAt: '2026-03-27T18:01:00.000Z',
+            }),
           },
           diffSummary: `从历史版本恢复：${userKey} seeded version`,
           userId,
@@ -339,7 +381,7 @@ function buildDraftRow(userKey, userId) {
     active_rule_ids: [PHASE_02_FIXTURES.writingRules[userKey]],
     active_reference_ids: [PHASE_02_FIXTURES.referenceAssets[userKey]],
     version_count: 1,
-    generated_title: `${userKey} generated title`,
+    generated_title: generatedTitle,
     generated_content: `${sections[0].heading}\n${sections[0].body}\n\n${sections[1].heading}\n${sections[1].body}`,
     review_state: reviewState,
     pending_change: pendingChange,
@@ -366,6 +408,7 @@ function buildDocumentRow(userKey, userId) {
 }
 
 function buildDocumentVersionRow(userKey, userId) {
+  const generatedTitle = `${userKey} generated title`;
   const sections = [
     {
       id: `section-${userKey}-1`,
@@ -384,23 +427,15 @@ function buildDocumentVersionRow(userKey, userId) {
     draft_id: PHASE_02_FIXTURES.drafts[userKey],
     user_id: userId,
     stage: 'draft_generated',
-    title: `${userKey} generated title`,
+    title: generatedTitle,
     content: `${sections[0].heading}\n${sections[0].body}\n\n${sections[1].heading}\n${sections[1].body}`,
     sections,
-    review_state: {
-      content_hash: `sha256:${userKey}-version-review-hash`,
-      doc_type: 'notice',
-      status: 'pass',
-      ran_at: '2026-03-27T18:01:00.000Z',
-      checks: [
-        {
-          code: 'notice_action_required',
-          status: 'pass',
-          message: '正文包含明确执行要求。',
-          fixPrompt: '',
-        },
-      ],
-    },
+    review_state: buildReviewState({
+      docType: 'notice',
+      title: generatedTitle,
+      sections,
+      ranAt: '2026-03-27T18:01:00.000Z',
+    }),
     change_summary: `${userKey} seeded version`,
   };
 }
