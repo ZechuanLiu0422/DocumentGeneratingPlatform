@@ -175,7 +175,7 @@ type Draft = {
 type OperationTracker = {
   operationId: string;
   draftId: string;
-  operationType: 'draft_generate' | 'draft_regenerate' | 'draft_revise';
+  operationType: 'draft_generate' | 'draft_regenerate' | 'draft_revise' | 'export';
   status: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
 };
 
@@ -311,7 +311,13 @@ function formatOperationStatus(status: OperationTracker['status']) {
 
 function getOperationNotice(operationType: OperationTracker['operationType'], status: OperationTracker['status']) {
   const actionLabel =
-    operationType === 'draft_revise' ? '改写任务' : operationType === 'draft_regenerate' ? '段落重写任务' : '正文生成任务';
+    operationType === 'draft_revise'
+      ? '改写任务'
+      : operationType === 'draft_regenerate'
+        ? '段落重写任务'
+        : operationType === 'export'
+          ? '导出任务'
+          : '正文生成任务';
 
   if (status === 'queued') {
     return `${actionLabel}已加入队列，页面会自动同步结果。`;
@@ -352,6 +358,15 @@ function getCompletionGateMessage(operationType: OperationTracker['operationType
   return operationType === 'draft_revise'
     ? '正文已修改，请重新运行定稿检查后再导出。'
     : '正文已更新，请重新运行定稿检查后再导出。';
+}
+
+function triggerBinaryDownload(downloadUrl: string, fileName = 'document.docx') {
+  const anchor = document.createElement('a');
+  anchor.href = downloadUrl;
+  anchor.download = fileName;
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
 }
 
 function getPendingActionLabel(action: PendingChange['action']) {
@@ -706,6 +721,30 @@ function GeneratePageContent() {
         setOperationNotice(getOperationNotice(activeOperation.operationType, nextStatus));
 
         if (nextStatus === 'succeeded') {
+          if (activeOperation.operationType === 'export') {
+            const downloadUrl = typeof data.result?.downloadUrl === 'string' ? data.result.downloadUrl : '';
+            const fileName = typeof data.result?.fileName === 'string' ? data.result.fileName : 'document.docx';
+            const workflowStage = typeof data.result?.workflowStage === 'string' ? data.result.workflowStage : '';
+
+            if (workflowStage) {
+              setWorkflowStage(workflowStage as WorkflowStage);
+              setCurrentStep(mapWorkflowStageToStep(workflowStage as WorkflowStage));
+            }
+
+            if (downloadUrl) {
+              triggerBinaryDownload(downloadUrl, fileName);
+            }
+
+            if (activeOperation.draftId) {
+              fetchVersions(activeOperation.draftId);
+            }
+
+            clearStoredOperation(activeOperation.draftId);
+            setActiveOperation(null);
+            setOperationNotice(getOperationNotice(activeOperation.operationType, 'succeeded'));
+            return;
+          }
+
           if (data.draft) {
             hydrateDraft(data.draft);
             if (typeof data.draft.id === 'string') {
@@ -1597,31 +1636,20 @@ function GeneratePageContent() {
         throw new Error(data.error || '导出失败');
       }
 
-      if (!data.file_data) {
-        throw new Error('导出失败');
+      if (data.mode === 'queued' && data.operationId && currentDraftId) {
+        const operation: OperationTracker = {
+          operationId: data.operationId,
+          draftId: currentDraftId,
+          operationType: 'export',
+          status: data.status || 'queued',
+        };
+        persistStoredOperation(operation);
+        setActiveOperation(operation);
+        setOperationNotice(getOperationNotice(operation.operationType, operation.status));
+        return;
       }
 
-      const byteCharacters = atob(data.file_data);
-      const byteNumbers = new Array(byteCharacters.length);
-      for (let i = 0; i < byteCharacters.length; i += 1) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i);
-      }
-
-      const blob = new Blob([new Uint8Array(byteNumbers)], {
-        type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      });
-
-      const url = window.URL.createObjectURL(blob);
-      const anchor = document.createElement('a');
-      anchor.href = url;
-      anchor.download = data.file_name || 'document.docx';
-      document.body.appendChild(anchor);
-      anchor.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(anchor);
-      if (currentDraftId) {
-        fetchVersions(currentDraftId);
-      }
+      throw new Error('导出失败');
     } catch (error: any) {
       alert(error.message || '导出失败');
     } finally {

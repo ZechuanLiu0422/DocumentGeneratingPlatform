@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { AppError } from '@/lib/api';
+import type { ExportArtifactRecord } from '@/lib/export-artifact-store';
 import type { AnalyzeResult } from '@/lib/official-document-ai';
 import {
   buildChangeCandidatePreview,
@@ -722,5 +723,113 @@ export async function persistPendingChangeOperationResult(
   return {
     mode: 'preview',
     candidate,
+  };
+}
+
+export async function persistExportOperationResult(
+  supabase: SupabaseClient,
+  payload: {
+    operationId: string;
+    userId: string;
+    draft: DraftRecord;
+    workflowStage: DraftRecord['workflow_stage'];
+    artifact: ExportArtifactRecord;
+    result: {
+      title: string;
+      content: string;
+      sections: DraftSectionRecord[];
+    };
+    changeSummary?: string;
+  }
+) {
+  const { error: documentError } = await supabase.from('documents').upsert(
+    {
+      id: payload.operationId,
+      user_id: payload.userId,
+      doc_type: payload.draft.doc_type,
+      title: payload.result.title,
+      recipient: payload.draft.recipient || '',
+      user_input: payload.draft.content || '',
+      generated_content: payload.result.content,
+      ai_provider: payload.draft.provider,
+      issuer: payload.draft.issuer || '',
+      doc_date: payload.draft.date || new Date().toISOString().slice(0, 10),
+      attachments: payload.draft.attachments,
+      contact_name: payload.draft.contact_name || null,
+      contact_phone: payload.draft.contact_phone || null,
+    },
+    { onConflict: 'id' }
+  );
+
+  if (documentError) {
+    throw documentError;
+  }
+
+  await saveDraftState(supabase, {
+    userId: payload.userId,
+    draftId: payload.draft.id,
+    docType: payload.draft.doc_type,
+    provider: payload.draft.provider,
+    baseFields: {
+      title: payload.result.title,
+      recipient: payload.draft.recipient || '',
+      content: payload.draft.content || '',
+      issuer: payload.draft.issuer || '',
+      date: payload.draft.date || '',
+      contact_name: payload.draft.contact_name || '',
+      contact_phone: payload.draft.contact_phone || '',
+      attachments: payload.draft.attachments,
+    },
+    workflow: {
+      workflow_stage: payload.workflowStage,
+      collected_facts: payload.draft.collected_facts,
+      missing_fields: payload.draft.missing_fields,
+      planning: payload.draft.planning,
+      outline: payload.draft.outline,
+      sections: payload.result.sections,
+      active_rule_ids: payload.draft.active_rule_ids,
+      active_reference_ids: payload.draft.active_reference_ids,
+      generated_title: payload.result.title,
+      generated_content: payload.result.content,
+      review_state: payload.draft.review_state || null,
+      pending_change: null,
+      version_count: payload.draft.version_count,
+    },
+  });
+
+  const { error: versionError } = await supabase.from('document_versions').upsert(
+    {
+      id: payload.operationId,
+      user_id: payload.userId,
+      draft_id: payload.draft.id,
+      stage: 'exported',
+      title: payload.result.title,
+      content: payload.result.content,
+      sections: payload.result.sections,
+      review_state: payload.draft.review_state || null,
+      change_summary: payload.changeSummary || '已导出 Word 定稿',
+    },
+    { onConflict: 'id' }
+  );
+
+  if (versionError) {
+    throw versionError;
+  }
+
+  const { error: updateError } = await supabase
+    .from('drafts')
+    .update({ version_count: await countVersions(supabase, payload.userId, payload.draft.id) })
+    .eq('id', payload.draft.id)
+    .eq('user_id', payload.userId);
+
+  if (updateError) {
+    throw updateError;
+  }
+
+  return {
+    artifactId: payload.artifact.id,
+    downloadUrl: `/api/operations/${payload.operationId}/download`,
+    fileName: payload.artifact.fileName,
+    workflowStage: payload.workflowStage,
   };
 }

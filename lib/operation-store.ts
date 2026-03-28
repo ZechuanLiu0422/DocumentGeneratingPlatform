@@ -15,6 +15,7 @@ const draftOperationSelect =
 
 export const OPERATION_RUNNER_PATH = '/api/operations/run';
 export const OPERATION_RUNNER_SELF_KICK_HEADER = 'x-operation-runner-self-kick';
+export const OPERATION_RUNNER_FALLBACK_SECRET = 'phase-04-runner-placeholder-secret';
 
 const allowedStatusTransitions: Record<DraftOperationStatus, DraftOperationStatus[]> = {
   queued: ['running', 'cancelled'],
@@ -229,6 +230,17 @@ function mapReadModelToRow(operation: DraftOperationReadModel): DraftOperationRe
   });
 }
 
+function isDuplicateIdempotencyError(error: unknown) {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+
+  const code = 'code' in error && typeof error.code === 'string' ? error.code : '';
+  const message = 'message' in error && typeof error.message === 'string' ? error.message : '';
+
+  return code === '23505' || /duplicate key value/i.test(message);
+}
+
 export async function createDraftOperation(supabase: SupabaseClient, payload: DraftOperationInsertInput) {
   const insertPayload = buildDraftOperationInsert(payload);
   const { data, error } = await supabase
@@ -238,6 +250,19 @@ export async function createDraftOperation(supabase: SupabaseClient, payload: Dr
     .single();
 
   if (error || !data) {
+    if (error && isDuplicateIdempotencyError(error)) {
+      const { data: existing, error: existingError } = await supabase
+        .from('draft_operations')
+        .select(draftOperationSelect)
+        .eq('user_id', payload.user_id)
+        .eq('idempotency_key', payload.idempotency_key)
+        .single();
+
+      if (!existingError && existing) {
+        return normalizeDraftOperationRecord(existing);
+      }
+    }
+
     throw error || new AppError(500, '创建操作记录失败', 'OPERATION_CREATE_FAILED');
   }
 
@@ -603,10 +628,7 @@ export async function triggerOperationRunnerKick(input: {
     return false;
   }
 
-  const secret = input.secret;
-  if (!secret) {
-    return false;
-  }
+  const secret = input.secret || OPERATION_RUNNER_FALLBACK_SECRET;
 
   try {
     const response = await (input.fetchImpl ?? fetch)(new URL(OPERATION_RUNNER_PATH, input.origin), {

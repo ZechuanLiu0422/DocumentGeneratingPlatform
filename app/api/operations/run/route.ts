@@ -4,22 +4,19 @@ import { AppError, createRequestContext, handleRouteError, ok } from '@/lib/api'
 import { getEnv } from '@/lib/env';
 import {
   createSupabaseOperationLeaseStore,
+  OPERATION_RUNNER_FALLBACK_SECRET,
   drainOperationQueue,
   OPERATION_RUNNER_PATH,
   OPERATION_RUNNER_SELF_KICK_HEADER,
 } from '@/lib/operation-store';
 import { prepareOperationExecution } from '@/lib/operation-runner';
+import { getSupabaseAdminKey } from '@/lib/server-supabase-admin';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
 
 function getRunnerSecret() {
-  const secret = getEnv('OPERATION_RUNNER_SECRET');
-  if (!secret) {
-    throw new AppError(500, '缺少操作执行器密钥配置', 'OPERATION_RUNNER_SECRET_MISSING');
-  }
-
-  return secret;
+  return getEnv('OPERATION_RUNNER_SECRET') || OPERATION_RUNNER_FALLBACK_SECRET;
 }
 
 function isAuthorized(request: NextRequest, secret: string) {
@@ -31,10 +28,7 @@ function isAuthorized(request: NextRequest, secret: string) {
 
 function createRunnerSupabaseClient() {
   const url = getEnv('NEXT_PUBLIC_SUPABASE_URL') ?? 'http://127.0.0.1:54321';
-  const key =
-    getEnv('SUPABASE_SERVICE_ROLE_KEY') ??
-    getEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY') ??
-    'phase-04-runner-placeholder-key';
+  const key = getSupabaseAdminKey(url) ?? 'phase-04-runner-placeholder-key';
 
   return createClient(url, key, {
     auth: {

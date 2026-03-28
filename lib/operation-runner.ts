@@ -1,12 +1,17 @@
 import { loadRuleAndReferenceContext } from '@/lib/collaborative-route-helpers';
 import {
+  compileSectionsToContent,
   type DraftRecord,
+  persistExportOperationResult,
   type ReferenceAssetRecord,
   persistFullDraftOperationResult,
   persistPendingChangeOperationResult,
   getDraftById,
 } from '@/lib/collaborative-store';
+import { DOCX_MIME_TYPE, uploadExportArtifact } from '@/lib/export-artifact-store';
+import { generateDocumentBuffer } from '@/lib/document-generator';
 import {
+  computeReviewContentHash,
   generateDraftWorkflow,
   regenerateSectionWorkflow,
   reviseWorkflow,
@@ -57,6 +62,13 @@ type DraftRevisePayload = {
   sessionReferences?: SessionReferencePayload;
 };
 
+type ExportPayload = {
+  draftId: string;
+  docType: DraftRecord['doc_type'];
+  provider: DraftRecord['provider'];
+  reviewHash: string;
+};
+
 function normalizeTextForSectionMatch(text: string) {
   return text.replace(/\s+/g, '').trim();
 }
@@ -97,6 +109,10 @@ function ensureGroundingConsistency(params: {
   if (!hasGroundingContext && claimsGrounding) {
     throw new AppError(400, '当前没有已批准的依据材料，不能返回采纳依据。', 'GROUNDING_CONTEXT_REQUIRED');
   }
+}
+
+function sanitizeTitle(title: string) {
+  return title.replace(/[\/\\:*?"<>|]/g, '_').trim() || 'document';
 }
 
 export async function prepareOperationExecution(input: {
@@ -239,6 +255,70 @@ export async function prepareOperationExecution(input: {
               sections: result.updatedSections,
               changeSummary: result.changeSummary,
             },
+          });
+        },
+      };
+    }
+    case 'export': {
+      const payload = operation.payload as ExportPayload;
+
+      if (!draft.review_state) {
+        throw new AppError(409, '请先运行定稿检查后再导出', 'REVIEW_REQUIRED');
+      }
+
+      const currentReviewHash = computeReviewContentHash({
+        title: draft.generated_title || draft.title || '',
+        content: draft.generated_content || compileSectionsToContent(draft.sections),
+        sections: draft.sections,
+      });
+
+      if (draft.review_state.content_hash !== payload.reviewHash || payload.reviewHash !== currentReviewHash) {
+        throw new AppError(409, '当前正文已变化，请重新运行定稿检查后再导出', 'REVIEW_STALE');
+      }
+
+      const title = draft.generated_title || draft.title || 'document';
+      const content = draft.generated_content || compileSectionsToContent(draft.sections);
+      const fileName = `${sanitizeTitle(title)}.docx`;
+      const bytes = await generateDocumentBuffer(payload.docType, {
+        title,
+        recipient: draft.recipient || '',
+        content,
+        issuer: draft.issuer || '',
+        date: draft.date || new Date().toISOString().slice(0, 10),
+        attachments: draft.attachments,
+        contactName: draft.contact_name || undefined,
+        contactPhone: draft.contact_phone || undefined,
+      });
+      const artifact = await uploadExportArtifact(input.supabase, {
+        operationId: operation.id,
+        userId: operation.userId,
+        draftId: draft.id,
+        fileName,
+        mimeType: DOCX_MIME_TYPE,
+        bytes,
+      });
+      const workflowStage = getAuthoritativeWorkflowStage('export_completed');
+
+      return {
+        result: {
+          artifactId: artifact.id,
+          downloadUrl: `/api/operations/${operation.id}/download`,
+          fileName: artifact.fileName,
+          workflowStage,
+        },
+        onComplete: async () => {
+          await persistExportOperationResult(input.supabase, {
+            operationId: operation.id,
+            userId: operation.userId,
+            draft,
+            workflowStage,
+            artifact,
+            result: {
+              title,
+              content,
+              sections: draft.sections,
+            },
+            changeSummary: '已导出 Word 定稿',
           });
         },
       };
