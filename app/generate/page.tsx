@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import {
   buildDraftSaveRequest,
   deriveHydratedDraftView,
+  type DraftSnapshot as PersistedDraftSnapshot,
   type PendingChange as PersistedPendingChange,
   type ReviewState as PersistedReviewState,
 } from '@/lib/generate-workspace';
@@ -171,7 +172,35 @@ type Draft = {
   pendingChange?: PendingChange | null;
 };
 
+type OperationTracker = {
+  operationId: string;
+  draftId: string;
+  operationType: 'draft_generate' | 'draft_regenerate' | 'draft_revise';
+  status: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+};
+
+type OperationStatusPayload = {
+  operation: {
+    id: string;
+    draftId: string | null;
+    type: OperationTracker['operationType'] | 'review' | 'export';
+    status: OperationTracker['status'];
+    attemptCount: number;
+    maxAttempts: number;
+    errorCode: string | null;
+    errorMessage: string | null;
+    createdAt: string;
+    updatedAt: string;
+    startedAt: string | null;
+    completedAt: string | null;
+    pollUrl: string;
+  };
+  result: Record<string, unknown> | null;
+  draft: Record<string, unknown> | null;
+};
+
 const MAX_PLANNING_SECTIONS = 8;
+const OPERATION_STORAGE_PREFIX = 'draft-operation:';
 const editablePlanningFieldLabels = {
   headingDraft: '段落标题',
   topicSummary: '本段内容',
@@ -204,6 +233,125 @@ function statusClass(status: ReviewCheck['status']) {
 function mapWorkflowStageToStep(stage: WorkflowStage) {
   if (stage === 'review' || stage === 'done') return 'review';
   return stage;
+}
+
+function getOperationStorageKey(draftId: string) {
+  return `${OPERATION_STORAGE_PREFIX}${draftId}`;
+}
+
+function readStoredOperation(draftId: string) {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  try {
+    const raw = window.localStorage.getItem(getOperationStorageKey(draftId));
+    if (!raw) {
+      return null;
+    }
+
+    return JSON.parse(raw) as OperationTracker;
+  } catch {
+    return null;
+  }
+}
+
+function persistStoredOperation(operation: OperationTracker) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  window.localStorage.setItem(getOperationStorageKey(operation.draftId), JSON.stringify(operation));
+}
+
+function clearStoredOperation(draftId: string) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  window.localStorage.removeItem(getOperationStorageKey(draftId));
+}
+
+function normalizeDraftSnapshot(rawDraft: Record<string, any>): PersistedDraftSnapshot {
+  return {
+    id: rawDraft.id,
+    doc_type: rawDraft.doc_type ?? rawDraft.docType ?? 'notice',
+    title: rawDraft.title ?? null,
+    recipient: rawDraft.recipient ?? null,
+    content: rawDraft.content ?? null,
+    issuer: rawDraft.issuer ?? null,
+    date: rawDraft.date ?? null,
+    provider: rawDraft.provider ?? 'claude',
+    contactName: rawDraft.contactName ?? rawDraft.contact_name ?? null,
+    contactPhone: rawDraft.contactPhone ?? rawDraft.contact_phone ?? null,
+    attachments: Array.isArray(rawDraft.attachments) ? rawDraft.attachments : [],
+    workflowStage: rawDraft.workflowStage ?? rawDraft.workflow_stage ?? 'intake',
+    collectedFacts: rawDraft.collectedFacts ?? rawDraft.collected_facts ?? {},
+    missingFields: rawDraft.missingFields ?? rawDraft.missing_fields ?? [],
+    planning: rawDraft.planning ?? null,
+    outline: rawDraft.outline ?? null,
+    sections: Array.isArray(rawDraft.sections) ? rawDraft.sections : [],
+    activeRuleIds: rawDraft.activeRuleIds ?? rawDraft.active_rule_ids ?? [],
+    activeReferenceIds: rawDraft.activeReferenceIds ?? rawDraft.active_reference_ids ?? [],
+    versionCount: rawDraft.versionCount ?? rawDraft.version_count ?? 0,
+    generatedTitle: rawDraft.generatedTitle ?? rawDraft.generated_title ?? rawDraft.title ?? '',
+    generatedContent: rawDraft.generatedContent ?? rawDraft.generated_content ?? rawDraft.content ?? '',
+    reviewState: rawDraft.reviewState ?? rawDraft.review_state ?? null,
+    pendingChange: rawDraft.pendingChange ?? rawDraft.pending_change ?? null,
+  };
+}
+
+function formatOperationStatus(status: OperationTracker['status']) {
+  if (status === 'queued') return '排队中';
+  if (status === 'running') return '处理中';
+  if (status === 'succeeded') return '已完成';
+  if (status === 'failed') return '失败';
+  return '已取消';
+}
+
+function getOperationNotice(operationType: OperationTracker['operationType'], status: OperationTracker['status']) {
+  const actionLabel =
+    operationType === 'draft_revise' ? '改写任务' : operationType === 'draft_regenerate' ? '段落重写任务' : '正文生成任务';
+
+  if (status === 'queued') {
+    return `${actionLabel}已加入队列，页面会自动同步结果。`;
+  }
+
+  if (status === 'running') {
+    return `${actionLabel}正在后台执行，请稍候。`;
+  }
+
+  if (status === 'succeeded') {
+    return `${actionLabel}已完成，最新结果已同步。`;
+  }
+
+  if (status === 'cancelled') {
+    return `${actionLabel}已取消。`;
+  }
+
+  return `${actionLabel}执行失败，请重试。`;
+}
+
+function getCompletionGateMessage(operationType: OperationTracker['operationType'], draft: Record<string, any> | null) {
+  if (!draft) {
+    return '';
+  }
+
+  const pendingChange = draft.pendingChange ?? draft.pending_change;
+  if (pendingChange) {
+    return operationType === 'draft_revise'
+      ? '存在待确认的改写候选，请先比较后再决定是否接受。'
+      : '存在待确认的候选变更，请先比较后再决定是否覆盖当前已接受正文。';
+  }
+
+  const reviewState = draft.reviewState ?? draft.review_state;
+  if (reviewState) {
+    return '';
+  }
+
+  return operationType === 'draft_revise'
+    ? '正文已修改，请重新运行定稿检查后再导出。'
+    : '正文已更新，请重新运行定稿检查后再导出。';
 }
 
 function getPendingActionLabel(action: PendingChange['action']) {
@@ -357,6 +505,8 @@ function GeneratePageContent() {
   const [reviewState, setReviewState] = useState<ReviewState | null>(null);
   const [pendingChange, setPendingChange] = useState<PendingChange | null>(null);
   const [reviewGateMessage, setReviewGateMessage] = useState('');
+  const [activeOperation, setActiveOperation] = useState<OperationTracker | null>(null);
+  const [operationNotice, setOperationNotice] = useState('');
   const [versions, setVersions] = useState<VersionItem[]>([]);
   const [busyAction, setBusyAction] = useState('');
   const [ruleForm, setRuleForm] = useState({
@@ -371,10 +521,11 @@ function GeneratePageContent() {
   const canVisitOutline = outlineSections.length > 0 || ['outline', 'draft', 'review', 'done'].includes(workflowStage);
   const canVisitDraft = outlineSections.length > 0 && currentDraftId !== null;
   const canVisitReview = sections.length > 0;
-  const busy = Boolean(busyAction);
+  const operationPending = activeOperation?.status === 'queued' || activeOperation?.status === 'running';
+  const busy = Boolean(busyAction) || operationPending;
 
-  const hydrateDraft = (draft: Draft) => {
-    const hydratedView = deriveHydratedDraftView(draft);
+  const hydrateDraft = (draft: Draft | Record<string, any>) => {
+    const hydratedView = deriveHydratedDraftView(normalizeDraftSnapshot(draft as Record<string, any>));
 
     setCurrentDraftId(hydratedView.currentDraftId);
     setDocType(hydratedView.docType);
@@ -510,6 +661,85 @@ function GeneratePageContent() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!currentDraftId) {
+      return;
+    }
+
+    if (activeOperation?.draftId === currentDraftId) {
+      return;
+    }
+
+    const stored = readStoredOperation(currentDraftId);
+    if (!stored) {
+      return;
+    }
+
+    setActiveOperation(stored);
+    setOperationNotice(getOperationNotice(stored.operationType, stored.status));
+  }, [currentDraftId, activeOperation?.draftId]);
+
+  useEffect(() => {
+    if (!activeOperation || !currentDraftId || activeOperation.draftId !== currentDraftId) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const pollOperation = async () => {
+      try {
+        const response = await fetch(`/api/operations/${activeOperation.operationId}`, { cache: 'no-store' });
+        const data = (await response.json()) as OperationStatusPayload & { error?: string };
+
+        if (cancelled) {
+          return;
+        }
+
+        if (!response.ok) {
+          throw new Error(data.error || '后台任务状态获取失败');
+        }
+
+        const nextStatus = data.operation.status;
+        setActiveOperation((prev) =>
+          prev && prev.operationId === activeOperation.operationId ? { ...prev, status: nextStatus } : prev
+        );
+        setOperationNotice(getOperationNotice(activeOperation.operationType, nextStatus));
+
+        if (nextStatus === 'succeeded') {
+          if (data.draft) {
+            hydrateDraft(data.draft);
+            if (typeof data.draft.id === 'string') {
+              fetchVersions(data.draft.id);
+            }
+            setReviewGateMessage(getCompletionGateMessage(activeOperation.operationType, data.draft));
+          }
+
+          clearStoredOperation(activeOperation.draftId);
+          setActiveOperation(null);
+          return;
+        }
+
+        if (nextStatus === 'failed' || nextStatus === 'cancelled') {
+          clearStoredOperation(activeOperation.draftId);
+          setActiveOperation(null);
+          setOperationNotice(data.operation.errorMessage || getOperationNotice(activeOperation.operationType, nextStatus));
+        }
+      } catch (error: any) {
+        if (!cancelled) {
+          setOperationNotice(error.message || '后台任务状态获取失败');
+        }
+      }
+    };
+
+    pollOperation();
+    const timer = window.setInterval(pollOperation, 2500);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [activeOperation, currentDraftId]);
+
   const handleLogout = async () => {
     await fetch('/api/logout', { method: 'POST' });
     window.location.replace('/login');
@@ -541,6 +771,8 @@ function GeneratePageContent() {
     setReviewState(null);
     setPendingChange(null);
     setReviewGateMessage('');
+    setActiveOperation(null);
+    setOperationNotice('');
     setVersions([]);
     setSessionReferences([]);
     setActiveReferenceIds([]);
@@ -1039,6 +1271,20 @@ function GeneratePageContent() {
         return;
       }
 
+      if (data.mode === 'queued' && data.operationId) {
+        const operation: OperationTracker = {
+          operationId: data.operationId,
+          draftId: currentDraftId,
+          operationType: mode === 'section' ? 'draft_regenerate' : 'draft_generate',
+          status: data.status || 'queued',
+        };
+        persistStoredOperation(operation);
+        setActiveOperation(operation);
+        setOperationNotice(getOperationNotice(operation.operationType, operation.status));
+        setPendingChange(null);
+        return;
+      }
+
       setSections(data.sections || []);
       setReviewState(null);
       setPendingChange(null);
@@ -1105,6 +1351,20 @@ function GeneratePageContent() {
       if (data.mode === 'preview' && data.candidate) {
         setPendingChange(data.candidate);
         setReviewGateMessage('存在待确认的改写候选，请先比较后再决定是否接受。');
+        return;
+      }
+
+      if (data.mode === 'queued' && data.operationId) {
+        const operation: OperationTracker = {
+          operationId: data.operationId,
+          draftId: currentDraftId,
+          operationType: 'draft_revise',
+          status: data.status || 'queued',
+        };
+        persistStoredOperation(operation);
+        setActiveOperation(operation);
+        setOperationNotice(getOperationNotice(operation.operationType, operation.status));
+        setPendingChange(null);
         return;
       }
 
@@ -1773,6 +2033,27 @@ function GeneratePageContent() {
               canVisitDraft={canVisitDraft}
               canVisitReview={canVisitReview}
             />
+
+            {(activeOperation || operationNotice) && (
+              <section
+                data-testid="operation-status-banner"
+                className={`rounded-2xl border p-4 shadow-sm ${
+                  operationPending ? 'border-blue-200 bg-blue-50 text-blue-900' : 'border-gray-200 bg-gray-50 text-gray-700'
+                }`}
+              >
+                <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
+                  <div>
+                    <div className="text-sm font-semibold">{operationPending ? '后台任务处理中' : '后台任务状态'}</div>
+                    <div className="mt-1 text-sm">{operationNotice}</div>
+                  </div>
+                  {activeOperation && (
+                    <div className="text-xs font-medium">
+                      {formatOperationStatus(activeOperation.status)} / {activeOperation.operationId}
+                    </div>
+                  )}
+                </div>
+              </section>
+            )}
 
             {pendingChange && (
               <section

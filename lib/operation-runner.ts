@@ -1,6 +1,7 @@
 import { loadRuleAndReferenceContext } from '@/lib/collaborative-route-helpers';
 import {
   type DraftRecord,
+  type ReferenceAssetRecord,
   persistFullDraftOperationResult,
   persistPendingChangeOperationResult,
   getDraftById,
@@ -28,7 +29,7 @@ type SessionReferencePayload = Array<{
   fileName: string;
   fileType: string;
   content: string;
-  analysis?: Record<string, unknown> | null;
+  analysis?: ReferenceAssetRecord['analysis'];
 }>;
 
 type DraftGeneratePayload = {

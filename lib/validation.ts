@@ -591,6 +591,7 @@ export type ChangeCandidatePreview = {
 export type PendingChangeState = z.infer<typeof pendingChangeStateSchema>;
 export type DraftOperationType = z.infer<typeof draftOperationTypeSchema>;
 export type DraftOperationStatus = z.infer<typeof draftOperationStatusSchema>;
+export type DraftOperationInsertInput = z.input<typeof draftOperationInsertSchema>;
 export type DraftOperationInsert = z.infer<typeof draftOperationInsertSchema>;
 export type DraftOperationRecord = z.infer<typeof draftOperationRecordSchema>;
 export type DraftOperationReadModel = z.infer<typeof draftOperationReadModelSchema>;

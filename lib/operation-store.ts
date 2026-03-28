@@ -4,7 +4,7 @@ import {
   draftOperationInsertSchema,
   draftOperationReadModelSchema,
   draftOperationRecordSchema,
-  type DraftOperationInsert,
+  type DraftOperationInsertInput,
   type DraftOperationReadModel,
   type DraftOperationRecord,
   type DraftOperationStatus,
@@ -188,7 +188,7 @@ export function createSupabaseOperationLeaseStore(supabase: SupabaseClient): Ope
   };
 }
 
-function buildDraftOperationInsert(payload: DraftOperationInsert) {
+function buildDraftOperationInsert(payload: DraftOperationInsertInput) {
   return draftOperationInsertSchema.parse({
     status: 'queued',
     attempt_count: 0,
@@ -229,7 +229,7 @@ function mapReadModelToRow(operation: DraftOperationReadModel): DraftOperationRe
   });
 }
 
-export async function createDraftOperation(supabase: SupabaseClient, payload: DraftOperationInsert) {
+export async function createDraftOperation(supabase: SupabaseClient, payload: DraftOperationInsertInput) {
   const insertPayload = buildDraftOperationInsert(payload);
   const { data, error } = await supabase
     .from('draft_operations')
@@ -554,7 +554,10 @@ export async function drainOperationQueue(input: {
         'result' in executionResult &&
         executionResult.result &&
         typeof executionResult.result === 'object'
-          ? executionResult
+          ? (executionResult as {
+              result: Record<string, unknown>;
+              onComplete?: () => Promise<void> | void;
+            })
           : { result: executionResult as Record<string, unknown> };
       await markOperationSucceeded({
         store: input.store,
