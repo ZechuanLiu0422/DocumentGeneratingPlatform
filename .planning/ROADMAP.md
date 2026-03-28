@@ -85,7 +85,7 @@ Plans:
 **Plans**: 3 plans
 Plans:
 - [x] 05-01-PLAN.md — Shell/bootstrap split, controller foundation, and delayed-endpoint readiness proof
-- [ ] 05-02-PLAN.md — Intake/planning/outline module extraction on the shared controller boundary
+- [x] 05-02-PLAN.md — Intake/planning/outline module extraction on the shared controller boundary
 - [ ] 05-03-PLAN.md — Draft/review/sidebar extraction plus final deferred-loading verification
 **UI hint**: yes
 
@@ -97,4 +97,4 @@ Plans:
 | 2. Verification and Telemetry Baseline | 4/4 | Complete | 2026-03-27 |
 | 3. Grounded Drafting and Review Trust | 4/4 | Complete | 2026-03-27 |
 | 4. Durable Execution and Export Hardening | 4/4 | Complete | 2026-03-28 |
-| 5. Generate Workspace Decomposition | 1/3 | In Progress | - |
+| 5. Generate Workspace Decomposition | 2/3 | In Progress | - |

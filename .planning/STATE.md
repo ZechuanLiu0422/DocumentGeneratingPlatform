@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Executing Phase 05
-stopped_at: Completed Phase 05 Plan 01
-last_updated: "2026-03-28T10:32:10Z"
+stopped_at: Completed Phase 05 Plan 02
+last_updated: "2026-03-28T10:46:28Z"
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 19
-  completed_plans: 17
+  completed_plans: 18
 ---
 
 # Project State
@@ -24,15 +24,15 @@ See: .planning/PROJECT.md (updated 2026-03-26)
 ## Current Position
 
 Phase: 05 (generate-workspace-decomposition) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 
 ## Performance Metrics
 
 **Execution Status:**
 
-- Total plans completed: 17
+- Total plans completed: 18
 - Completed phases: 01, 02, 03, 04
-- Latest completed plan: `05-01`
+- Latest completed plan: `05-02`
 
 **By Phase:**
 
@@ -42,13 +42,14 @@ Plan: 2 of 3
 | 02 | 4/4 | Complete |
 | 03 | 4/4 | Complete |
 | 04 | 4/4 | Complete |
-| 05 | 1/3 | In Progress |
+| 05 | 2/3 | In Progress |
 
 **Recent Trend:**
 
-- Phase 05 now has a thin workspace shell/controller/bootstrap boundary and delayed side-panel loading for seeded draft readiness.
+- Phase 05 now has isolated intake/planning/outline modules with controller-owned mutations on top of the shell/bootstrap boundary.
 - Trend: Stable
 
+| Phase 05 P02 | 14m | 2 tasks | 7 files |
 | Phase 05 P01 | 4m | 2 tasks | 8 files |
 | Phase 04 P01 | 9m | 2 tasks | 8 files |
 | Phase 04 P02 | 13m | 2 tasks | 11 files |
@@ -80,16 +81,19 @@ Recent decisions affecting current work:
 
 ### Pending Todos
 
-- Execute Phase 05 plan 02 to extract intake/planning/outline modules onto the new controller boundary.
+- Execute Phase 05 plan 03 to extract draft/review/sidebar modules and finish Phase 5 verification.
 - Keep Phase 05 verification on the seeded local Supabase + Playwright harness when `/generate` changes.
 
 ### Blockers/Concerns
 
 - Browser proof remains environment-sensitive because local verification depends on Docker-backed Supabase, CLI-readable local credentials, and a bindable local port.
-- `app/generate/page.tsx` still owns most stage rendering; Phase 05-02 must shrink that render surface instead of adding another layer of inline stage logic.
+- `app/generate/page.tsx` still owns draft/review/sidebar rendering; Phase 05-03 must finish the decomposition without disturbing the hardened workflow contracts.
 
 ## Latest Completed Work
 
+- Completed Phase 05 Plan 02 on 2026-03-28.
+- Verified Phase 05 Plan 02 with `node --experimental-strip-types --experimental-test-module-mocks --test-concurrency=1 --test tests/phase-05/contracts/stage-module-contract.test.ts` and `npm run build`.
+- Added dedicated intake/planning/outline stage modules, extracted shared stage navigation, moved early-stage route transitions into the shared controller hook, and reduced `/generate` to composition glue for the first three stages.
 - Completed Phase 05 Plan 01 on 2026-03-28.
 - Verified Phase 05 Plan 01 with `npm run test:phase-05:contracts`, `npm run build`, `npm run test:phase-02:rls:reset`, `npm run test:phase-02:e2e:seed`, and `npm run test:phase-05:e2e`.
 - Added a reusable workspace shell/controller/bootstrap boundary, Phase 5 contract coverage, and deferred non-critical panel loading so the seeded draft renders before helper panels finish hydrating.
@@ -122,6 +126,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-03-28T10:32:10Z
-Stopped at: Completed Phase 05 Plan 01
+Last session: 2026-03-28T10:46:28Z
+Stopped at: Completed Phase 05 Plan 02
 Resume file: None

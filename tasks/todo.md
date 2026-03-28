@@ -10,11 +10,11 @@
 - [x] Execute Phase 05 Plan 01 Task 2 with shell/controller bootstrap extraction
 - [x] Verify Task 2 build plus delayed-endpoint browser proof, then commit atomically
 - [x] Run Phase 05 Plan 01 verification, create `05-01-SUMMARY.md`, and update planning state artifacts
-- [ ] Execute Phase 05 Plan 02 Task 1 with TDD red-green flow
-- [ ] Verify Task 1 stage-module contract coverage and commit atomically
-- [ ] Execute Phase 05 Plan 02 Task 2 with controller-owned intake/planning/outline wiring
-- [ ] Verify Task 2 build and commit atomically
-- [ ] Run Phase 05 Plan 02 verification, create `05-02-SUMMARY.md`, and update planning state artifacts
+- [x] Execute Phase 05 Plan 02 Task 1 with TDD red-green flow
+- [x] Verify Task 1 stage-module contract coverage and commit atomically
+- [x] Execute Phase 05 Plan 02 Task 2 with controller-owned intake/planning/outline wiring
+- [x] Verify Task 2 build and commit atomically
+- [x] Run Phase 05 Plan 02 verification, create `05-02-SUMMARY.md`, and update planning state artifacts
 - [ ] Execute Phase 05 Plan 03 Task 1 with TDD red-green flow
 - [ ] Verify Task 1 draft/review/sidebar contract coverage and commit atomically
 - [ ] Execute Phase 05 Plan 03 Task 2 with deferred panel extraction and final verification wiring
@@ -44,21 +44,27 @@
 
 ## Phase 05 Execution Review
 
-- Pending.
+- In progress. `05-01` and `05-02` are complete; `05-03` remains for draft/review/sidebar extraction and final phase verification.
 
 ## Phase 05 Plan 01 Execution Checklist
 
-- [ ] Task 1 RED: add Phase 5 contract test, delayed-endpoint browser scenario, and package scripts
-- [ ] Task 1 verify: `node --experimental-strip-types --experimental-test-module-mocks --test-concurrency=1 --test tests/phase-05/contracts/workspace-bootstrap-contract.test.ts`
-- [ ] Task 1 commit: Phase 5 verification harness
-- [ ] Task 2 implement: extract bootstrap/controller/shell boundaries and defer panel fetches
-- [ ] Task 2 verify: `node --experimental-strip-types --experimental-test-module-mocks --test-concurrency=1 --test tests/phase-05/contracts/workspace-bootstrap-contract.test.ts`
-- [ ] Task 2 verify: `npm run build`
-- [ ] Task 2 verify: `npm run test:phase-02:rls:reset`
-- [ ] Task 2 verify: `npm run test:phase-02:e2e:seed`
-- [ ] Task 2 verify: `playwright test --config=playwright.config.ts --project=chromium tests/e2e/generate-smoke.spec.ts --grep "UX-01|Phase 5"`
-- [ ] Task 2 commit: shell/controller bootstrap split
-- [ ] Closeout: create `05-01-SUMMARY.md`, run self-checks, and update planning state artifacts
+- [x] Task 1 RED: add Phase 5 contract test, delayed-endpoint browser scenario, and package scripts
+- [x] Task 1 verify: `node --experimental-strip-types --experimental-test-module-mocks --test-concurrency=1 --test tests/phase-05/contracts/workspace-bootstrap-contract.test.ts`
+- [x] Task 1 commit: Phase 5 verification harness
+- [x] Task 2 implement: extract bootstrap/controller/shell boundaries and defer panel fetches
+- [x] Task 2 verify: `node --experimental-strip-types --experimental-test-module-mocks --test-concurrency=1 --test tests/phase-05/contracts/workspace-bootstrap-contract.test.ts`
+- [x] Task 2 verify: `npm run build`
+- [x] Task 2 verify: `npm run test:phase-02:rls:reset`
+- [x] Task 2 verify: `npm run test:phase-02:e2e:seed`
+- [x] Task 2 verify: `playwright test --config=playwright.config.ts --project=chromium tests/e2e/generate-smoke.spec.ts --grep "UX-01|Phase 5"`
+- [x] Task 2 commit: shell/controller bootstrap split
+- [x] Closeout: create `05-01-SUMMARY.md`, run self-checks, and update planning state artifacts
+
+## Phase 05 Plan 02 Execution Review
+
+- Executed on 2026-03-28 with two commits: stage-module extraction in `5b15c50`, then controller-owned intake/planning/outline action wiring in `86b2279`.
+- Verification evidence: `node --experimental-strip-types --experimental-test-module-mocks --test-concurrency=1 --test tests/phase-05/contracts/stage-module-contract.test.ts` and `npm run build`.
+- Outcome: `/generate` now renders intake, planning, and outline through isolated stage modules, early-stage route transitions live in `useGenerateWorkspaceController`, and the page no longer contains explicit intake/planning/outline step branches.
 
 - [x] Execute Phase 04 Plan 04 Task 1 with TDD red-green flow
 - [x] Verify Task 1 export download and artifact contract coverage and commit atomically
