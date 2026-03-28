@@ -15,6 +15,10 @@ if (!globalThis.__documentRateLimitStore) {
   globalThis.__documentRateLimitStore = rateLimitStore;
 }
 
+export const LEGACY_RATE_LIMIT_MODE = 'process-local';
+export const LEGACY_RATE_LIMIT_MIGRATION_GUIDANCE =
+  'Phase 4 async routes must await enforceDistributedRateLimit(...) when they adopt durable execution. This legacy helper remains process-local for untouched synchronous routes.';
+
 export function enforceRateLimit(key: string, limit: number, windowMs: number, message: string) {
   const now = Date.now();
   const current = rateLimitStore.get(key);

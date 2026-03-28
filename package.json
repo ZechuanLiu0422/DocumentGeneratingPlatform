@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "test:phase-04:ops:limiter": "node --experimental-strip-types --test tests/phase-04/ops/distributed-ratelimit.test.ts",
     "test:phase-04:contracts": "node --experimental-strip-types --experimental-test-module-mocks --test-concurrency=1 --test tests/phase-04/contracts/*.test.ts",
     "test:phase-04:contracts:harness": "node --experimental-strip-types --experimental-test-module-mocks --test-concurrency=1 --test tests/phase-04/contracts/harness-smoke.test.ts",
     "test:phase-04:contracts:foundation": "node --experimental-strip-types --experimental-test-module-mocks --test-concurrency=1 --test tests/phase-04/contracts/operation-foundation-contract.test.ts",
