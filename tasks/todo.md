@@ -1,5 +1,91 @@
 # TODO
 
+- [ ] Execute Phase 04 Plan 03 Task 1 with TDD red-green flow
+- [ ] Verify Task 1 async draft/revise enqueue contract coverage and commit atomically
+- [ ] Execute Phase 04 Plan 03 Task 2 with TDD red-green flow
+- [ ] Verify Task 2 operation-status/polling/telemetry coverage and commit atomically
+- [ ] Run Phase 04 Plan 03 verification, create `04-03-SUMMARY.md`, and update planning state artifacts
+- [ ] Record Phase 04 Plan 03 execution review notes
+
+## Phase 04 Plan 03 Execution Review
+
+- Pending
+
+- [x] Execute Phase 04 Plan 02 Task 1 with TDD red-green flow
+- [x] Verify Task 1 distributed limiter contract coverage and commit atomically
+- [x] Execute Phase 04 Plan 02 Task 2 with TDD red-green flow
+- [x] Verify Task 2 lease/idempotency/runner drain coverage and commit atomically
+- [x] Run Phase 04 Plan 02 verification, create `04-02-SUMMARY.md`, and update planning state artifacts
+- [x] Record Phase 04 Plan 02 execution review notes
+
+## Phase 04 Plan 02 Execution Review
+
+- Executed on 2026-03-28 with four TDD commits: red/green for the persistent distributed limiter, then red/green for lease-aware coordination and autonomous runner drain coverage.
+- Verification evidence: `node --experimental-strip-types --test tests/phase-04/ops/distributed-ratelimit.test.ts`, `npm run test:phase-04:ops:coordination`, and `npm run test:phase-04:ops`.
+- Outcome: Phase 4 now has persistent burst limiting, lease/idempotency queue primitives, a protected `/api/operations/run` entrypoint, cron-based recovery wiring, and shared operation telemetry fields for later async route adoption.
+- Execution note: the initial executor worker stalled after Task 1 returned its commits, so Task 2 and plan closeout were resumed locally from the committed baseline.
+
+- [x] Execute Phase 04 Plan 01 Task 1 with TDD red-green flow
+- [x] Verify Task 1 Phase 4 harness coverage and commit atomically
+- [x] Execute Phase 04 Plan 01 Task 2 with TDD red-green flow
+- [x] Verify Task 2 durable-operation foundation coverage and commit atomically
+- [x] Run Phase 04 Plan 01 verification, create `04-01-SUMMARY.md`, and update planning state artifacts
+- [x] Record Phase 04 Plan 01 execution review notes
+
+## Phase 04 Plan 01 Execution Review
+
+- Executed on 2026-03-28 with four TDD commits: red/green for the Phase 4 harness, then red/green for the durable-operation storage foundation.
+- Verification evidence: `npm run test:phase-04:contracts:harness` and `npm run test:phase-04:contracts:foundation`.
+- Outcome: Phase 4 now has a provider-free contract harness, durable-operation schemas, a dedicated `draft_operations` migration, and normalized store helpers for later queue/runner plans.
+
+- [x] Inspect current long-running generation/export execution paths for Phase 4 planning
+- [x] Inspect current rate-limit and quota enforcement boundaries for Phase 4 planning
+- [x] Inspect current export response payload/transport flow for Phase 4 planning
+- [x] Inspect existing persistence/state surfaces that could support resumable jobs with minimal schema churn
+- [x] Summarize concrete file ownership boundaries for a Phase 4 plan split
+
+- [x] Create Phase 04 planning checklist and initialize the phase-planning directory
+- [x] Research Phase 04 durable execution and export hardening against the current brownfield stack
+- [x] Generate executable PLAN.md files for Phase 04 durable execution work
+- [x] Verify Phase 04 plans with the GSD plan checker and close any coverage gaps
+- [x] Record Phase 04 planning review notes and artifact results
+
+## Phase 04 Planning Review
+
+- Phase 04 planning completed on 2026-03-28 for durable execution and export hardening.
+- Final artifact set written under `.planning/phases/04-durable-execution-and-export-hardening`: `04-RESEARCH.md`, `04-VALIDATION.md`, `04-01-PLAN.md`, `04-02-PLAN.md`, `04-03-PLAN.md`, `04-04-PLAN.md`.
+- Wave/dependency layout after checker revisions:
+- Wave 1: `04-01` durable-operation contracts and queue schema foundation.
+- Wave 2: `04-02` distributed limiter, lease/idempotency coordination, autonomous runner drain path.
+- Wave 3: `04-03` async draft/revise route adoption plus status polling and telemetry.
+- Wave 4: `04-04` export artifact storage, binary download route, and browser export hardening.
+- Requirement coverage:
+- `OPS-01` → `04-01`, `04-03`, `04-04`
+- `OPS-02` → `04-02`, with explicit async limiter migration carried into touched Phase 4 routes
+- `OPS-03` → `04-01`, `04-02`, `04-03`, `04-04`
+- `UX-03` → `04-04`
+- Verification evidence:
+- `node "$HOME/.codex/get-shit-done/bin/gsd-tools.cjs" frontmatter validate .planning/phases/04-durable-execution-and-export-hardening/04-01-PLAN.md --schema plan`
+- `node "$HOME/.codex/get-shit-done/bin/gsd-tools.cjs" verify plan-structure .planning/phases/04-durable-execution-and-export-hardening/04-01-PLAN.md`
+- `node "$HOME/.codex/get-shit-done/bin/gsd-tools.cjs" frontmatter validate .planning/phases/04-durable-execution-and-export-hardening/04-02-PLAN.md --schema plan`
+- `node "$HOME/.codex/get-shit-done/bin/gsd-tools.cjs" verify plan-structure .planning/phases/04-durable-execution-and-export-hardening/04-02-PLAN.md`
+- `node "$HOME/.codex/get-shit-done/bin/gsd-tools.cjs" frontmatter validate .planning/phases/04-durable-execution-and-export-hardening/04-03-PLAN.md --schema plan`
+- `node "$HOME/.codex/get-shit-done/bin/gsd-tools.cjs" verify plan-structure .planning/phases/04-durable-execution-and-export-hardening/04-03-PLAN.md`
+- `node "$HOME/.codex/get-shit-done/bin/gsd-tools.cjs" frontmatter validate .planning/phases/04-durable-execution-and-export-hardening/04-04-PLAN.md --schema plan`
+- `node "$HOME/.codex/get-shit-done/bin/gsd-tools.cjs" verify plan-structure .planning/phases/04-durable-execution-and-export-hardening/04-04-PLAN.md`
+- `gsd-plan-checker` re-review verdict: `FLAG` only, after blocker fixes; no remaining blockers.
+- Checker-driven revisions that closed the original blockers:
+- corrected waves to match dependencies
+- made autonomous queue drain explicit through scheduler plus immediate self-kick
+- made the distributed limiter migration explicitly async on touched Phase 4 routes
+- narrowed `04-03` away from review-route churn
+- fixed export storage to concrete Supabase Storage-backed artifact delivery
+- signed off `04-VALIDATION.md` with the updated verification map
+
+- [x] Inspect current macOS memory pressure and top resident-memory processes
+- [x] Classify high-memory processes by safe-to-close priority and expected reclaim
+- [x] Summarize concrete close recommendations and note anything to avoid killing
+
 - [x] Begin Phase 3 execution and complete Wave 1 plan `03-01`
 - [x] Verify Wave 1 outputs, write `03-01-SUMMARY.md`, and commit atomically
 - [x] Execute Phase 03 Plan 02 and commit grounded provenance work atomically
