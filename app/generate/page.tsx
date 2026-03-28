@@ -2,6 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import { GenerateWorkspaceShell } from '@/app/generate/_components/GenerateWorkspaceShell';
+import { StageNavigation } from '@/app/generate/_components/StageNavigation';
+import { IntakeStage } from '@/app/generate/_components/stages/IntakeStage';
+import { OutlineStage } from '@/app/generate/_components/stages/OutlineStage';
+import { PlanningStage } from '@/app/generate/_components/stages/PlanningStage';
 import { useGenerateWorkspaceBootstrap } from '@/app/generate/_hooks/useGenerateWorkspaceBootstrap';
 import { useGenerateWorkspaceController } from '@/app/generate/_hooks/useGenerateWorkspaceController';
 import {
@@ -428,45 +432,6 @@ function getIncompletePlanningSections(sections: PlanningSection[]) {
       return `第 ${index + 1} 段缺少：${missing.join('、')}`;
     })
     .filter(Boolean);
-}
-
-function StageTabs(props: {
-  currentStep: WorkflowStage;
-  onChange: (step: WorkflowStage) => void;
-  canVisitPlanning: boolean;
-  canVisitOutline: boolean;
-  canVisitDraft: boolean;
-  canVisitReview: boolean;
-}) {
-  const steps = [
-    { id: 'intake', label: '1. 信息采集', enabled: true },
-    { id: 'planning', label: '2. 结构共创', enabled: props.canVisitPlanning },
-    { id: 'outline', label: '3. 提纲确认', enabled: props.canVisitOutline },
-    { id: 'draft', label: '4. 分段成文', enabled: props.canVisitDraft },
-    { id: 'review', label: '5. 定稿检查', enabled: props.canVisitReview },
-  ] as const;
-
-  return (
-    <div className="grid grid-cols-2 xl:grid-cols-5 gap-3">
-      {steps.map((step) => (
-        <button
-          key={step.id}
-          type="button"
-          disabled={!step.enabled}
-          onClick={() => step.enabled && props.onChange(step.id)}
-          className={`rounded-xl border px-4 py-3 text-sm font-medium transition-colors ${
-            props.currentStep === step.id
-              ? 'border-blue-600 bg-blue-600 text-white'
-              : step.enabled
-                ? 'border-gray-200 bg-white hover:border-blue-300 hover:text-blue-700'
-                : 'border-gray-100 bg-gray-50 text-gray-400'
-          }`}
-        >
-          {step.label}
-        </button>
-      ))}
-    </div>
-  );
 }
 
 function GeneratePageContent() {
@@ -1952,7 +1917,7 @@ function GeneratePageContent() {
           </div>
 
           <div className="space-y-6">
-            <StageTabs
+            <StageNavigation
               currentStep={currentStep}
               onChange={setCurrentStep}
               canVisitPlanning={canVisitPlanning}
@@ -2087,428 +2052,55 @@ function GeneratePageContent() {
 
             <div className="rounded-2xl bg-white p-6 shadow-sm">
               {currentStep === 'intake' && (
-                <div className="space-y-6">
-                  <div>
-                    <h2 className="text-lg font-bold">信息采集</h2>
-                    <p className="mt-1 text-sm text-gray-500">AI 会根据当前信息识别缺口，并用 1-3 个高价值问题继续追问。</p>
-                  </div>
-
-                  {Object.keys(collectedFacts).length > 0 && (
-                    <div className="rounded-xl bg-gray-50 p-4">
-                      <div className="text-sm font-medium">已采集事实</div>
-                      <div className="mt-3 grid gap-3 md:grid-cols-2">
-                        {Object.entries(collectedFacts).map(([key, value]) => (
-                          <div key={key} className="rounded-lg bg-white px-3 py-2 text-sm">
-                            <div className="text-xs uppercase tracking-wide text-gray-400">{key}</div>
-                            <div className="mt-1 text-gray-700">{formatFactValue(value)}</div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="grid gap-4 xl:grid-cols-2">
-                    <div className="rounded-xl border border-gray-200 p-4">
-                      <div className="text-sm font-medium">当前状态</div>
-                      <div className={`mt-3 inline-flex rounded-full px-3 py-1 text-xs font-medium ${readiness === 'ready' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
-                        {readiness === 'ready' ? '信息已基本齐备，可生成提纲' : '信息仍需补充'}
-                      </div>
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {missingFields.length > 0 ? (
-                          missingFields.map((field) => (
-                            <span key={field} className="rounded-full bg-red-50 px-3 py-1 text-xs text-red-700">
-                              {field}
-                            </span>
-                          ))
-                        ) : (
-                          <span className="text-sm text-gray-500">当前没有阻塞提纲生成的关键缺口。</span>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="rounded-xl border border-gray-200 p-4">
-                      <div className="text-sm font-medium">AI 下一轮建议追问</div>
-                      <div className="mt-3 space-y-3">
-                        {nextQuestions.length > 0 ? (
-                          nextQuestions.map((question) => (
-                            <div key={question.id} className="rounded-lg bg-gray-50 px-3 py-3 text-sm">
-                              <div className="font-medium">{question.label}</div>
-                              <div className="mt-1 text-gray-600">{question.question}</div>
-                              <div className="mt-2 text-xs text-gray-400">{question.placeholder}</div>
-                            </div>
-                          ))
-                        ) : (
-                          <div className="text-sm text-gray-500">先点击下方按钮，让 AI 根据你的输入整理并追问。</div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="mb-2 block text-sm font-medium">继续补充给 AI 的说明</label>
-                    <textarea
-                      value={intakeMessage}
-                      onChange={(event) => setIntakeMessage(event.target.value)}
-                      className="min-h-[140px] w-full rounded-lg border px-3 py-2"
-                      placeholder="例如：请示事项主要是申请专项资金，前期我们已完成方案论证，但仍缺正式批复。"
-                    />
-                  </div>
-
-                  <div className="flex flex-wrap gap-3">
-                    <button
-                      onClick={handleIntake}
-                      disabled={busy || !providers.length}
-                      className="rounded-lg bg-blue-600 px-5 py-3 text-white hover:bg-blue-700 disabled:bg-gray-400"
-                    >
-                      {busyAction === 'intake' ? '整理中...' : '让 AI 继续追问并整理事实'}
-                    </button>
-                    <button
-                      onClick={handleGeneratePlanning}
-                      disabled={busy || !canVisitPlanning}
-                      className="rounded-lg border border-blue-200 px-5 py-3 text-blue-700 hover:bg-blue-50 disabled:border-gray-200 disabled:text-gray-400"
-                    >
-                      {busyAction === 'planning' ? '生成中...' : '进入结构共创'}
-                    </button>
-                    <button
-                      onClick={() => handleGenerateOutline('direct')}
-                      disabled={busy || !canVisitPlanning}
-                      className="rounded-lg border border-blue-200 px-5 py-3 text-blue-700 hover:bg-blue-50 disabled:border-gray-200 disabled:text-gray-400"
-                    >
-                      直接生成提纲
-                    </button>
-                  </div>
-                </div>
+                <IntakeStage
+                  collectedFacts={collectedFacts}
+                  missingFields={missingFields}
+                  nextQuestions={nextQuestions}
+                  readiness={readiness}
+                  intakeMessage={intakeMessage}
+                  busy={busy}
+                  providersAvailable={providers.length > 0}
+                  busyAction={busyAction}
+                  canVisitPlanning={canVisitPlanning}
+                  formatFactValue={formatFactValue}
+                  onIntakeMessageChange={setIntakeMessage}
+                  onHandleIntake={handleIntake}
+                  onGeneratePlanning={handleGeneratePlanning}
+                  onGenerateOutline={() => handleGenerateOutline('direct')}
+                />
               )}
 
               {currentStep === 'planning' && (
-                <div className="space-y-6">
-                  <div>
-                    <h2 className="text-lg font-bold">结构共创</h2>
-                    <p className="mt-1 text-sm text-gray-500">AI 会先给你 3 种结构方案。先选方向，再微调段数、顺序和每段主题，最后再生成正式提纲。</p>
-                  </div>
-
-                  {planningOptions.length === 0 ? (
-                    <div className="rounded-xl border border-dashed border-gray-300 p-8 text-center">
-                      <p className="text-sm text-gray-500">还没有结构方案，先让 AI 给出几种明显不同的组织思路。</p>
-                      <div className="mt-4 flex flex-wrap justify-center gap-3">
-                        <button onClick={handleGeneratePlanning} disabled={busy} className="rounded-lg bg-blue-600 px-5 py-3 text-white hover:bg-blue-700 disabled:bg-gray-400">
-                          {busyAction === 'planning' ? '生成中...' : 'AI 生成结构建议'}
-                        </button>
-                        <button onClick={() => handleGenerateOutline('direct')} disabled={busy} className="rounded-lg border border-blue-200 px-5 py-3 text-blue-700 hover:bg-blue-50 disabled:text-gray-400">
-                          直接生成提纲
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="grid gap-4 xl:grid-cols-3">
-                        {planningOptions.map((option) => (
-                          <button
-                            key={option.planId}
-                            type="button"
-                            onClick={() => controller.selectPlanningOption(option)}
-                            className={`rounded-2xl border p-5 text-left transition-colors ${
-                              selectedPlanId === option.planId
-                                ? 'border-blue-500 bg-blue-50 shadow-sm'
-                                : 'border-gray-200 bg-white hover:border-blue-300'
-                            }`}
-                          >
-                            <div className="flex items-center justify-between gap-3">
-                              <div className="text-base font-semibold">{option.label}</div>
-                              <span className="rounded-full bg-white px-3 py-1 text-xs text-gray-500">{option.sections.length} 段</span>
-                            </div>
-                            <div className="mt-2 text-sm text-blue-700">{option.strategy}</div>
-                            <div className="mt-3 text-sm leading-6 text-gray-600">{option.whyThisWorks}</div>
-                            <div className="mt-4 space-y-2">
-                              {option.sections.map((section, index) => (
-                                <div key={section.id} className="rounded-lg bg-white/90 px-3 py-2 text-sm text-gray-700">
-                                  <div className="font-medium">{index + 1}. {section.headingDraft}</div>
-                                  <div className="mt-1 text-xs text-gray-500">{section.topicSummary}</div>
-                                </div>
-                              ))}
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-
-                      <div className="rounded-2xl border border-gray-200 p-5">
-                        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-                          <div>
-                            <div className="text-base font-semibold">当前选中的结构方案</div>
-                            <div className="mt-1 text-sm text-gray-500">继续调整段落标题、本段内容和顺序即可。AI 的结构说明默认折叠，不会干扰主编辑流程。</div>
-                          </div>
-                          <div className="flex flex-wrap gap-3">
-                            <button onClick={handleGeneratePlanning} disabled={busy} className="rounded-lg border border-blue-200 px-4 py-2 text-blue-700 hover:bg-blue-50 disabled:text-gray-400">
-                              {busyAction === 'planning' ? '生成中...' : '换一批结构方案'}
-                            </button>
-                            <button onClick={() => handleGenerateOutline('direct')} disabled={busy} className="rounded-lg border border-gray-200 px-4 py-2 hover:bg-gray-50 disabled:text-gray-400">
-                              直接生成提纲
-                            </button>
-                            <button onClick={() => handleGenerateOutline('fromPlan')} disabled={busy || planningSections.length === 0} className="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:bg-gray-400">
-                              基于该结构生成正式提纲
-                            </button>
-                          </div>
-                        </div>
-
-                        <div className="mt-5 space-y-4">
-                          {planningSections.map((section, index) => (
-                            <div key={section.id} className="rounded-xl border border-gray-200 p-4">
-                              <div className="flex items-start justify-between gap-3">
-                                <div className="rounded-full bg-blue-50 px-3 py-1 text-sm font-semibold text-blue-700">第 {index + 1} 段</div>
-                                <div className="flex flex-wrap gap-2">
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      controller.updatePlanningSections((current) => {
-                                        if (index === 0) return current;
-                                        const next = [...current];
-                                        [next[index - 1], next[index]] = [next[index], next[index - 1]];
-                                        return next;
-                                      })
-                                    }
-                                    disabled={index === 0}
-                                    className="rounded-lg border border-gray-200 px-3 py-2 text-sm hover:bg-gray-50 disabled:text-gray-300"
-                                  >
-                                    上移
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      controller.updatePlanningSections((current) => {
-                                        if (index === current.length - 1) return current;
-                                        const next = [...current];
-                                        [next[index], next[index + 1]] = [next[index + 1], next[index]];
-                                        return next;
-                                      })
-                                    }
-                                    disabled={index === planningSections.length - 1}
-                                    className="rounded-lg border border-gray-200 px-3 py-2 text-sm hover:bg-gray-50 disabled:text-gray-300"
-                                  >
-                                    下移
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      controller.updatePlanningSections((current) => current.filter((_, currentIndex) => currentIndex !== index))
-                                    }
-                                    className="rounded-lg border border-red-200 px-3 py-2 text-sm text-red-700 hover:bg-red-50"
-                                  >
-                                    删除
-                                  </button>
-                                </div>
-                              </div>
-
-                              <div className="mt-4 space-y-4">
-                                <div>
-                                  <label className="mb-2 block text-sm font-medium">段落标题</label>
-                                  <textarea
-                                    value={section.headingDraft}
-                                    onChange={(event) =>
-                                      controller.updatePlanningSections((current) =>
-                                        current.map((item, currentIndex) =>
-                                          currentIndex === index ? { ...item, headingDraft: event.target.value } : item
-                                        )
-                                      )
-                                    }
-                                    className="min-h-[92px] w-full rounded-lg border px-3 py-2"
-                                  />
-                                </div>
-                                <div>
-                                  <label className="mb-2 block text-sm font-medium">本段内容</label>
-                                  <textarea
-                                    value={section.topicSummary}
-                                    onChange={(event) =>
-                                      controller.updatePlanningSections((current) =>
-                                        current.map((item, currentIndex) =>
-                                          currentIndex === index ? { ...item, topicSummary: event.target.value } : item
-                                        )
-                                      )
-                                    }
-                                    className="min-h-[92px] w-full rounded-lg border px-3 py-2"
-                                  />
-                                </div>
-
-                                <details className="rounded-xl border border-gray-200 bg-gray-50">
-                                  <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-gray-700">
-                                    AI 结构说明
-                                  </summary>
-                                  <div className="space-y-3 border-t border-gray-200 px-4 py-4 text-sm text-gray-700">
-                                    <div>
-                                      <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">这一段的作用</div>
-                                      <p className="mt-1 leading-6">{section.purpose || '生成正式提纲时将自动补全。'}</p>
-                                    </div>
-                                    <div>
-                                      <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">为什么排在这里</div>
-                                      <p className="mt-1 leading-6">{section.orderReason || '生成正式提纲时将自动补全。'}</p>
-                                    </div>
-                                    <p className="text-xs leading-5 text-gray-500">
-                                      你修改段落标题、本段内容或顺序后，这里的说明会在生成正式提纲时自动同步更新。
-                                    </p>
-                                  </div>
-                                </details>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() =>
-                            controller.updatePlanningSections((current) => [
-                              ...current,
-                              {
-                                id: `planning-${Date.now()}`,
-                                headingDraft: '',
-                                purpose: '',
-                                topicSummary: '',
-                                orderReason: '',
-                              },
-                            ])
-                          }
-                          disabled={planningSections.length >= MAX_PLANNING_SECTIONS}
-                          className="mt-4 rounded-lg border border-blue-200 px-4 py-2 text-blue-700 hover:bg-blue-50 disabled:border-gray-200 disabled:bg-gray-50 disabled:text-gray-400"
-                        >
-                          {planningSections.length >= MAX_PLANNING_SECTIONS ? `最多 ${MAX_PLANNING_SECTIONS} 段` : '新增一段'}
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </div>
+                <PlanningStage
+                  planningOptions={planningOptions}
+                  selectedPlanId={selectedPlanId}
+                  planningSections={planningSections}
+                  busy={busy}
+                  busyAction={busyAction}
+                  maxPlanningSections={MAX_PLANNING_SECTIONS}
+                  onGeneratePlanning={handleGeneratePlanning}
+                  onGenerateOutlineDirect={() => handleGenerateOutline('direct')}
+                  onGenerateOutlineFromPlan={() => handleGenerateOutline('fromPlan')}
+                  onSelectPlanningOption={controller.selectPlanningOption}
+                  onUpdatePlanningSections={controller.updatePlanningSections}
+                />
               )}
 
               {currentStep === 'outline' && (
-                <div className="space-y-6">
-                  <div>
-                    <h2 className="text-lg font-bold">提纲确认</h2>
-                    <p className="mt-1 text-sm text-gray-500">先确认标题和提纲结构，再进入正文生成，能显著降低返工。</p>
-                  </div>
-
-                  {outlineSections.length === 0 ? (
-                    <div className="rounded-xl border border-dashed border-gray-300 p-8 text-center">
-                      <p className="text-sm text-gray-500">还没有正式提纲，先完成结构共创，或者直接生成一版正式提纲。</p>
-                      <button onClick={() => handleGenerateOutline(planningSections.length > 0 ? 'fromPlan' : 'direct')} disabled={busy} className="mt-4 rounded-lg bg-blue-600 px-5 py-3 text-white hover:bg-blue-700 disabled:bg-gray-400">
-                        {busyAction === 'outline' ? '生成中...' : '生成提纲'}
-                      </button>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="rounded-xl bg-gray-50 p-4">
-                        <div className="text-sm font-medium">标题建议</div>
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          {titleOptions.map((title) => (
-                            <button
-                              key={title}
-                              onClick={() => setFormData((prev) => ({ ...prev, title }))}
-                              className={`rounded-full px-4 py-2 text-sm ${
-                                formData.title === title ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-blue-50'
-                              }`}
-                            >
-                              {title}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {outlineRisks.length > 0 && (
-                        <div className="rounded-xl bg-yellow-50 p-4 text-sm text-yellow-800">
-                          <div className="font-medium">AI 风险提醒</div>
-                          <div className="mt-2 space-y-2">
-                            {outlineRisks.map((risk) => (
-                              <div key={risk}>{risk}</div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      <div className="space-y-4">
-                        {outlineSections.map((section, index) => (
-                          <div key={section.id} className="rounded-xl border border-gray-200 p-4">
-                            <div className="grid gap-3 xl:grid-cols-[minmax(320px,1.2fr),1.8fr]">
-                              <div>
-                                <label className="mb-2 block text-sm font-medium">小标题</label>
-                                <textarea
-                                value={section.heading}
-                                onChange={(event) =>
-                                  setOutlineSections((prev) =>
-                                    prev.map((item, current) => (current === index ? { ...item, heading: event.target.value } : item))
-                                  )
-                                }
-                                className="min-h-[104px] w-full resize-y rounded-lg border px-3 py-2 text-base leading-relaxed"
-                              />
-                              </div>
-                              <div>
-                                <label className="mb-2 block text-sm font-medium">本段目的</label>
-                                <textarea
-                                value={section.purpose}
-                                onChange={(event) =>
-                                  setOutlineSections((prev) =>
-                                    prev.map((item, current) => (current === index ? { ...item, purpose: event.target.value } : item))
-                                  )
-                                }
-                                className="min-h-[104px] w-full rounded-lg border px-3 py-2"
-                              />
-                              </div>
-                            </div>
-                            <div className="mt-3">
-                              <div className="mb-2 flex items-center justify-between gap-3">
-                                <label className="block text-sm font-medium">关键要点</label>
-                                <button
-                                  type="button"
-                                  onClick={() => controller.updateOutlineKeyPoints(index, (current) => [...current, ''])}
-                                  className="rounded-lg border border-blue-200 px-3 py-1.5 text-sm text-blue-700 hover:bg-blue-50"
-                                >
-                                  新增一条
-                                </button>
-                              </div>
-                              <div className="space-y-3">
-                                {(section.keyPoints.length > 0 ? section.keyPoints : ['']).map((point, pointIndex) => (
-                                  <div key={`${section.id}-${pointIndex}`} className="flex items-start gap-3">
-                                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-50 text-sm font-semibold text-blue-700">
-                                      {pointIndex + 1}
-                                    </div>
-                                    <input
-                                      type="text"
-                                      value={point}
-                                      onChange={(event) =>
-                                        controller.updateOutlineKeyPoints(index, (current) => {
-                                          const next = current.length > 0 ? [...current] : [''];
-                                          next[pointIndex] = event.target.value;
-                                          return next;
-                                        })
-                                      }
-                                      className="flex-1 rounded-lg border px-3 py-2"
-                                      placeholder={`请输入第 ${pointIndex + 1} 条关键要点`}
-                                    />
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        controller.updateOutlineKeyPoints(index, (current) =>
-                                          current.filter((_, currentIndex) => currentIndex !== pointIndex)
-                                        )
-                                      }
-                                      className="rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50"
-                                    >
-                                      删除
-                                    </button>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-
-                      <div className="flex flex-wrap gap-3">
-                        <button onClick={() => handleGenerateOutline(planningSections.length > 0 ? 'fromPlan' : 'direct')} disabled={busy} className="rounded-lg border border-blue-200 px-5 py-3 text-blue-700 hover:bg-blue-50 disabled:text-gray-400">
-                          让 AI 重排提纲
-                        </button>
-                        <button onClick={handleConfirmOutline} className="rounded-lg bg-blue-600 px-5 py-3 text-white hover:bg-blue-700">
-                          确认提纲并进入正文
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </div>
+                <OutlineStage
+                  outlineSections={outlineSections}
+                  outlineRisks={outlineRisks}
+                  titleOptions={titleOptions}
+                  selectedTitle={formData.title}
+                  planningSections={planningSections}
+                  busy={busy}
+                  busyAction={busyAction}
+                  onGenerateOutline={handleGenerateOutline}
+                  onConfirmOutline={handleConfirmOutline}
+                  onSetTitle={(title) => setFormData((prev) => ({ ...prev, title }))}
+                  onSetOutlineSections={setOutlineSections}
+                  onUpdateOutlineKeyPoints={controller.updateOutlineKeyPoints}
+                />
               )}
 
               {currentStep === 'draft' && (
