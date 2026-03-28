@@ -7,8 +7,8 @@
 - [x] Record Phase 05 planning review notes and commit the resulting planning docs
 - [x] Execute Phase 05 Plan 01 Task 1 with TDD red-green flow
 - [x] Verify Task 1 deferred-bootstrap contract coverage and commit atomically
-- [ ] Execute Phase 05 Plan 01 Task 2 with shell/controller bootstrap extraction
-- [ ] Verify Task 2 build plus delayed-endpoint browser proof, then commit atomically
+- [x] Execute Phase 05 Plan 01 Task 2 with shell/controller bootstrap extraction
+- [x] Verify Task 2 build plus delayed-endpoint browser proof, then commit atomically
 - [ ] Run Phase 05 Plan 01 verification, create `05-01-SUMMARY.md`, and update planning state artifacts
 - [ ] Execute Phase 05 Plan 02 Task 1 with TDD red-green flow
 - [ ] Verify Task 1 stage-module contract coverage and commit atomically
