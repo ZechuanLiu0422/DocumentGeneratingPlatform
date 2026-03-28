@@ -14,7 +14,7 @@ This brownfield roadmap hardens the existing drafting platform in the order the 
 - [x] **Phase 2: Verification and Telemetry Baseline** - Add automated safety rails and observability around workflow behavior.
 - [x] **Phase 3: Grounded Drafting and Review Trust** - Make generated output reviewable, provenance-backed, and safer to accept.
 - [x] **Phase 4: Durable Execution and Export Hardening** - Move fragile long-running work into resumable operational paths.
-- [ ] **Phase 5: Generate Workspace Decomposition** - Reduce generate-surface complexity and improve load performance without changing trusted behavior.
+- [x] **Phase 5: Generate Workspace Decomposition** - Reduce generate-surface complexity and improve load performance without changing trusted behavior.
 
 ## Phase Details
 
@@ -86,7 +86,7 @@ Plans:
 Plans:
 - [x] 05-01-PLAN.md — Shell/bootstrap split, controller foundation, and delayed-endpoint readiness proof
 - [x] 05-02-PLAN.md — Intake/planning/outline module extraction on the shared controller boundary
-- [ ] 05-03-PLAN.md — Draft/review/sidebar extraction plus final deferred-loading verification
+- [x] 05-03-PLAN.md — Draft/review/sidebar extraction plus final deferred-loading verification
 **UI hint**: yes
 
 ## Progress
@@ -97,4 +97,4 @@ Plans:
 | 2. Verification and Telemetry Baseline | 4/4 | Complete | 2026-03-27 |
 | 3. Grounded Drafting and Review Trust | 4/4 | Complete | 2026-03-27 |
 | 4. Durable Execution and Export Hardening | 4/4 | Complete | 2026-03-28 |
-| 5. Generate Workspace Decomposition | 2/3 | In Progress | - |
+| 5. Generate Workspace Decomposition | 3/3 | Complete | 2026-03-28 |

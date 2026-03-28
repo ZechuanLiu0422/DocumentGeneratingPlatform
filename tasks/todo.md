@@ -19,8 +19,8 @@
 - [x] Verify Task 1 draft/review/sidebar contract coverage and commit atomically
 - [x] Execute Phase 05 Plan 03 Task 2 with deferred panel extraction and final verification wiring
 - [x] Verify Task 2 full Phase 5 contract/build/browser coverage and commit atomically
-- [ ] Run Phase 05 verification, create `05-03-SUMMARY.md`, and update planning state artifacts
-- [ ] Record Phase 05 execution review notes
+- [x] Run Phase 05 verification, create `05-03-SUMMARY.md`, and update planning state artifacts
+- [x] Record Phase 05 execution review notes
 
 ## Phase 05 Planning Review
 
@@ -44,7 +44,9 @@
 
 ## Phase 05 Execution Review
 
-- In progress. `05-01` and `05-02` are complete; `05-03` remains for draft/review/sidebar extraction and final phase verification.
+- Completed on 2026-03-28 with four commits across the phase: shell/bootstrap split in `4e2ed61`, stage modules in `5b15c50`, draft/review surface extraction in `68a92ab`, and sidebar/history extraction plus final verification wiring in `b25afa3`.
+- Verification evidence: `npm run test:phase-05:contracts`, `npm run build`, `npm run test:phase-02:rls:reset`, `npm run test:phase-02:e2e:seed`, and `npm run test:phase-05:e2e`.
+- Outcome: `/generate` now loads through shell/bootstrap/controller boundaries, renders stage and panel concerns in isolated modules, and preserves both delayed-helper readiness and seeded trusted workflow behavior under browser proof.
 
 ## Phase 05 Plan 01 Execution Checklist
 
@@ -79,7 +81,13 @@
 - [x] Task 2 verify: `npm run test:phase-02:e2e:seed`
 - [x] Task 2 verify: `playwright test --config=playwright.config.ts --project=chromium tests/e2e/generate-smoke.spec.ts --grep "UX-01|UX-02|Phase 5"`
 - [x] Task 2 commit: sidebar extraction and final phase verification wiring
-- [ ] Closeout: create `05-03-SUMMARY.md`, update planning state artifacts, and record Phase 5 execution review notes
+- [x] Closeout: create `05-03-SUMMARY.md`, update planning state artifacts, and record Phase 5 execution review notes
+
+## Phase 05 Plan 03 Execution Review
+
+- Executed on 2026-03-28 with two commits: draft/review plus status extraction in `68a92ab`, then sidebar/history extraction and final Phase 5 browser coverage in `b25afa3`.
+- Verification evidence: `npm run test:phase-05:contracts`, `npm run build`, `npm run test:phase-02:rls:reset`, `npm run test:phase-02:e2e:seed`, and `npm run test:phase-05:e2e`.
+- Outcome: `/generate` now composes dedicated draft/review stages, compare/status banners, a knowledge sidebar, and a version-history panel while keeping deferred helper fetches in the bootstrap hook.
 
 - [x] Execute Phase 04 Plan 04 Task 1 with TDD red-green flow
 - [x] Verify Task 1 export download and artifact contract coverage and commit atomically

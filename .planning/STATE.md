@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Executing Phase 05
-stopped_at: Completed Phase 05 Plan 02
-last_updated: "2026-03-28T10:46:28Z"
+status: Completed Phase 05
+stopped_at: Completed Phase 05 Plan 03
+last_updated: "2026-03-28T14:29:18Z"
 progress:
   total_phases: 5
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 19
-  completed_plans: 18
+  completed_plans: 19
 ---
 
 # Project State
@@ -19,20 +19,20 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-26)
 
 **Core value:** Users can turn incomplete inputs into a reliable, policy-aligned official document draft quickly without losing control of drafts, versions, or organizational writing context.
-**Current focus:** Phase 05 — generate-workspace-decomposition
+**Current focus:** Milestone wrap-up after Phase 05 completion
 
 ## Current Position
 
-Phase: 05 (generate-workspace-decomposition) — EXECUTING
-Plan: 3 of 3
+Phase: 05 (generate-workspace-decomposition) — COMPLETE
+Plan: 3 of 3 complete
 
 ## Performance Metrics
 
 **Execution Status:**
 
-- Total plans completed: 18
-- Completed phases: 01, 02, 03, 04
-- Latest completed plan: `05-02`
+- Total plans completed: 19
+- Completed phases: 01, 02, 03, 04, 05
+- Latest completed plan: `05-03`
 
 **By Phase:**
 
@@ -42,13 +42,14 @@ Plan: 3 of 3
 | 02 | 4/4 | Complete |
 | 03 | 4/4 | Complete |
 | 04 | 4/4 | Complete |
-| 05 | 2/3 | In Progress |
+| 05 | 3/3 | Complete |
 
 **Recent Trend:**
 
-- Phase 05 now has isolated intake/planning/outline modules with controller-owned mutations on top of the shell/bootstrap boundary.
+- Phase 05 now has isolated stage, banner, sidebar, and history modules on top of the shell/bootstrap/controller boundary, with tagged browser proof for delayed helpers and seeded workflow behavior.
 - Trend: Stable
 
+| Phase 05 P03 | 11m | 2 tasks | 9 files |
 | Phase 05 P02 | 14m | 2 tasks | 7 files |
 | Phase 05 P01 | 4m | 2 tasks | 8 files |
 | Phase 04 P01 | 9m | 2 tasks | 8 files |
@@ -81,16 +82,21 @@ Recent decisions affecting current work:
 
 ### Pending Todos
 
-- Execute Phase 05 plan 03 to extract draft/review/sidebar modules and finish Phase 5 verification.
-- Keep Phase 05 verification on the seeded local Supabase + Playwright harness when `/generate` changes.
+- Run milestone closeout when ready; all planned Phase 05 work is complete.
+- Keep `/generate` verification on the seeded local Supabase + Playwright harness when stage or panel boundaries change in future work.
 
 ### Blockers/Concerns
 
 - Browser proof remains environment-sensitive because local verification depends on Docker-backed Supabase, CLI-readable local credentials, and a bindable local port.
-- `app/generate/page.tsx` still owns draft/review/sidebar rendering; Phase 05-03 must finish the decomposition without disturbing the hardened workflow contracts.
+- No active implementation blockers remain for the current milestone.
 
 ## Latest Completed Work
 
+- Completed Phase 05 Plan 03 on 2026-03-28.
+- Verified Phase 05 Plan 03 with `npm run test:phase-05:contracts`, `npm run build`, `npm run test:phase-02:rls:reset`, `npm run test:phase-02:e2e:seed`, and `npm run test:phase-05:e2e`.
+- Extracted draft/review surfaces, pending-change and operation-status banners, knowledge sidebar helpers, and version history rendering into dedicated modules while keeping deferred helper fetching inside `useGenerateWorkspaceBootstrap.ts`.
+- Completed Phase 05 execution on 2026-03-28.
+- Closed UX-01 and UX-02, making `/generate` composition-oriented and proving that delayed helper endpoints no longer block usable first render.
 - Completed Phase 05 Plan 02 on 2026-03-28.
 - Verified Phase 05 Plan 02 with `node --experimental-strip-types --experimental-test-module-mocks --test-concurrency=1 --test tests/phase-05/contracts/stage-module-contract.test.ts` and `npm run build`.
 - Added dedicated intake/planning/outline stage modules, extracted shared stage navigation, moved early-stage route transitions into the shared controller hook, and reduced `/generate` to composition glue for the first three stages.
@@ -126,6 +132,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-03-28T10:46:28Z
-Stopped at: Completed Phase 05 Plan 02
+Last session: 2026-03-28T14:29:18Z
+Stopped at: Completed Phase 05 Plan 03
 Resume file: None
