@@ -98,8 +98,22 @@ test('OPS-01 seeded export uses operation polling and binary download delivery',
 
 test('UX-01 Phase 5 generate workspace becomes usable before deferred panel data resolves', async ({ page }) => {
   const scenario = readScenario();
+  let delayedPhrasesPending = true;
+  let delayedContactsPending = true;
   let delayedRulesPending = true;
   let delayedAssetsPending = true;
+
+  await page.route('**/api/common-phrases', async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 3_000));
+    delayedPhrasesPending = false;
+    await route.continue();
+  });
+
+  await page.route('**/api/contacts', async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 3_000));
+    delayedContactsPending = false;
+    await route.continue();
+  });
 
   await page.route('**/api/writing-rules', async (route) => {
     await new Promise((resolve) => setTimeout(resolve, 3_000));
@@ -118,11 +132,39 @@ test('UX-01 Phase 5 generate workspace becomes usable before deferred panel data
   await expect(page.getByRole('heading', { name: 'AI 协作式公文工作台' })).toBeVisible({ timeout: 1_500 });
   await expect(page.getByRole('heading', { name: '定稿检查' })).toBeVisible({ timeout: 1_500 });
   await expect(page.getByRole('button', { name: '下载 Word 定稿' })).toBeVisible({ timeout: 1_500 });
+  expect(delayedPhrasesPending).toBe(true);
+  expect(delayedContactsPending).toBe(true);
   expect(delayedRulesPending).toBe(true);
   expect(delayedAssetsPending).toBe(true);
 
-  await page.waitForResponse((response) => response.url().includes('/api/writing-rules') && response.ok());
-  await page.waitForResponse((response) => response.url().includes('/api/reference-assets') && response.ok());
+  await expect.poll(() => delayedPhrasesPending).toBe(false);
+  await expect.poll(() => delayedContactsPending).toBe(false);
   await expect.poll(() => delayedRulesPending).toBe(false);
   await expect.poll(() => delayedAssetsPending).toBe(false);
+});
+
+test('UX-02 Phase 5 decomposed workspace preserves seeded compare, history, and review flow', async ({ page }) => {
+  const scenario = readScenario();
+
+  await page.goto(scenario.draft.generatePath, { waitUntil: 'networkidle' });
+
+  const pendingChangePanel = page.getByTestId('pending-change-panel');
+
+  await expect(page.getByRole('heading', { name: '版本历史' })).toBeVisible();
+  await expect(page.getByText(scenario.draft.versionSummary, { exact: true })).toBeVisible();
+  await page
+    .getByText(scenario.draft.versionSummary, { exact: true })
+    .locator('..')
+    .getByRole('button', { name: '恢复到此版本' })
+    .click();
+  await expect(pendingChangePanel.getByText('待确认候选变更', { exact: true })).toBeVisible();
+  await expect(pendingChangePanel.getByText(scenario.draft.candidateSummary, { exact: true })).toBeVisible();
+
+  await page.getByRole('button', { name: '拒绝候选变更' }).click();
+  await expect(page.getByTestId('pending-change-panel')).toHaveCount(0);
+
+  await page.getByRole('button', { name: '5. 定稿检查' }).click();
+  await expect(page.getByRole('heading', { name: '定稿检查' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '下载 Word 定稿' })).toBeEnabled();
+  await expect(page.getByText(scenario.draft.previewTitle, { exact: true })).toBeVisible();
 });

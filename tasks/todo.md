@@ -15,10 +15,10 @@
 - [x] Execute Phase 05 Plan 02 Task 2 with controller-owned intake/planning/outline wiring
 - [x] Verify Task 2 build and commit atomically
 - [x] Run Phase 05 Plan 02 verification, create `05-02-SUMMARY.md`, and update planning state artifacts
-- [ ] Execute Phase 05 Plan 03 Task 1 with TDD red-green flow
-- [ ] Verify Task 1 draft/review/sidebar contract coverage and commit atomically
-- [ ] Execute Phase 05 Plan 03 Task 2 with deferred panel extraction and final verification wiring
-- [ ] Verify Task 2 full Phase 5 contract/build/browser coverage and commit atomically
+- [x] Execute Phase 05 Plan 03 Task 1 with TDD red-green flow
+- [x] Verify Task 1 draft/review/sidebar contract coverage and commit atomically
+- [x] Execute Phase 05 Plan 03 Task 2 with deferred panel extraction and final verification wiring
+- [x] Verify Task 2 full Phase 5 contract/build/browser coverage and commit atomically
 - [ ] Run Phase 05 verification, create `05-03-SUMMARY.md`, and update planning state artifacts
 - [ ] Record Phase 05 execution review notes
 
@@ -72,13 +72,13 @@
 - [x] Task 1 implement: extract draft/review stages plus pending-change and operation-status surfaces
 - [x] Task 1 verify: `node --experimental-strip-types --experimental-test-module-mocks --test-concurrency=1 --test tests/phase-05/contracts/sidebar-decomposition-contract.test.ts`
 - [x] Task 1 commit: draft/review/status extraction
-- [ ] Task 2 implement: extract knowledge/version side panels and finish page composition cleanup
-- [ ] Task 2 verify: `node --experimental-strip-types --experimental-test-module-mocks --test-concurrency=1 --test tests/phase-05/contracts/*.test.ts`
-- [ ] Task 2 verify: `npm run build`
-- [ ] Task 2 verify: `npm run test:phase-02:rls:reset`
-- [ ] Task 2 verify: `npm run test:phase-02:e2e:seed`
-- [ ] Task 2 verify: `playwright test --config=playwright.config.ts --project=chromium tests/e2e/generate-smoke.spec.ts --grep "UX-01|UX-02|Phase 5"`
-- [ ] Task 2 commit: sidebar extraction and final phase verification wiring
+- [x] Task 2 implement: extract knowledge/version side panels and finish page composition cleanup
+- [x] Task 2 verify: `node --experimental-strip-types --experimental-test-module-mocks --test-concurrency=1 --test tests/phase-05/contracts/*.test.ts`
+- [x] Task 2 verify: `npm run build`
+- [x] Task 2 verify: `npm run test:phase-02:rls:reset`
+- [x] Task 2 verify: `npm run test:phase-02:e2e:seed`
+- [x] Task 2 verify: `playwright test --config=playwright.config.ts --project=chromium tests/e2e/generate-smoke.spec.ts --grep "UX-01|UX-02|Phase 5"`
+- [x] Task 2 commit: sidebar extraction and final phase verification wiring
 - [ ] Closeout: create `05-03-SUMMARY.md`, update planning state artifacts, and record Phase 5 execution review notes
 
 - [x] Execute Phase 04 Plan 04 Task 1 with TDD red-green flow

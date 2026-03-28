@@ -17,7 +17,7 @@
     "test:phase-04:contracts:harness": "node --experimental-strip-types --experimental-test-module-mocks --test-concurrency=1 --test tests/phase-04/contracts/harness-smoke.test.ts",
     "test:phase-04:contracts:foundation": "node --experimental-strip-types --experimental-test-module-mocks --test-concurrency=1 --test tests/phase-04/contracts/operation-foundation-contract.test.ts",
     "test:phase-05:contracts": "node --experimental-strip-types --experimental-test-module-mocks --test-concurrency=1 --test tests/phase-05/contracts/*.test.ts",
-    "test:phase-05:e2e": "playwright test --config=playwright.config.ts --project=chromium tests/e2e/generate-smoke.spec.ts --grep \"UX-01|Phase 5\"",
+    "test:phase-05:e2e": "playwright test --config=playwright.config.ts --project=chromium tests/e2e/generate-smoke.spec.ts --grep \"UX-01|UX-02|Phase 5\"",
     "test:phase-03:contracts": "node --experimental-strip-types --experimental-test-module-mocks --test-concurrency=1 --test tests/phase-03/contracts/*.test.ts",
     "test:phase-03:contracts:harness": "node --experimental-strip-types --experimental-test-module-mocks --test-concurrency=1 --test tests/phase-03/contracts/shared-fixtures.ts",
     "test:phase-03:contracts:foundation": "node --experimental-strip-types --experimental-test-module-mocks --test-concurrency=1 --test tests/phase-03/contracts/provenance-persistence-contract.test.ts tests/phase-03/contracts/change-candidate-contract.test.ts",

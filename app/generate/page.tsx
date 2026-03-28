@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { GenerateWorkspaceShell } from '@/app/generate/_components/GenerateWorkspaceShell';
 import { OperationStatusBanner } from '@/app/generate/_components/OperationStatusBanner';
+import { KnowledgeSidebar } from '@/app/generate/_components/panels/KnowledgeSidebar';
 import { PendingChangeBanner } from '@/app/generate/_components/PendingChangeBanner';
 import { StageNavigation } from '@/app/generate/_components/StageNavigation';
 import { DraftStage } from '@/app/generate/_components/stages/DraftStage';
@@ -10,6 +11,7 @@ import { IntakeStage } from '@/app/generate/_components/stages/IntakeStage';
 import { OutlineStage } from '@/app/generate/_components/stages/OutlineStage';
 import { PlanningStage } from '@/app/generate/_components/stages/PlanningStage';
 import { ReviewStage } from '@/app/generate/_components/stages/ReviewStage';
+import { VersionHistoryPanel } from '@/app/generate/_components/panels/VersionHistoryPanel';
 import { useGenerateWorkspaceBootstrap } from '@/app/generate/_hooks/useGenerateWorkspaceBootstrap';
 import { useGenerateWorkspaceController } from '@/app/generate/_hooks/useGenerateWorkspaceController';
 import {
@@ -1476,368 +1478,63 @@ function GeneratePageContent() {
       onLogout={handleLogout}
     >
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[420px,1fr]">
-          <div className="space-y-6">
-            <div className="rounded-2xl bg-white p-6 shadow-sm">
-              <h2 className="text-lg font-bold">基础信息</h2>
-              <div className="mt-4 space-y-4">
-                <div>
-                  <label className="mb-2 block text-sm font-medium">文种</label>
-                  <select
-                    value={docType}
-                    onChange={(event) => controller.handleDocTypeChange(event.target.value as Draft['doc_type'] | '')}
-                    className="w-full rounded-lg border px-3 py-2"
-                  >
-                    <option value="">请选择文种</option>
-                    {docTypes.map((type) => (
-                      <option key={type.id} value={type.id}>
-                        {type.name}：{type.desc}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+        <div className="space-y-6">
+          <KnowledgeSidebar
+            docTypes={docTypes}
+            docType={docType}
+            formData={formData}
+            phrases={phrases}
+            contacts={contacts}
+            newAttachment={newAttachment}
+            attachments={attachments}
+            savingPhraseType={savingPhraseType}
+            provider={provider}
+            providers={providers}
+            visibleRules={visibleRules}
+            activeRuleIds={activeRuleIds}
+            ruleForm={ruleForm}
+            referenceUploadMode={referenceUploadMode}
+            sessionReferences={sessionReferences}
+            visibleAssets={visibleAssets}
+            activeReferenceIds={activeReferenceIds}
+            uploadingReference={uploadingReference}
+            referenceAnalysisPreview={referenceAnalysisPreview}
+            onDocTypeChange={(value) => controller.handleDocTypeChange(value as Draft['doc_type'] | '')}
+            onFormDataChange={(field, value) => setFormData((prev) => ({ ...prev, [field]: value }))}
+            onSavePhrase={handleSavePhrase}
+            onSelectContact={handleSelectContact}
+            onSaveContact={handleSaveContact}
+            onNewAttachmentChange={setNewAttachment}
+            onAddAttachment={handleAddAttachment}
+            onRemoveAttachment={handleRemoveAttachment}
+            onProviderChange={(nextProvider) => {
+              setProvider(nextProvider);
+              localStorage.setItem('lastUsedProvider', nextProvider);
+            }}
+            onToggleRule={(ruleId, checked) =>
+              setActiveRuleIds((prev) => (checked ? Array.from(new Set([...prev, ruleId])) : prev.filter((item) => item !== ruleId)))
+            }
+            onRuleFormChange={(field, value) => setRuleForm((prev) => ({ ...prev, [field]: value }))}
+            onCreateRule={handleCreateRule}
+            onReferenceUpload={handleReferenceUpload}
+            onReferenceUploadModeChange={setReferenceUploadMode}
+            onRemoveSessionReference={(index) =>
+              setSessionReferences((prev) => prev.filter((_, current) => current !== index))
+            }
+            onToggleReference={(assetId, checked) =>
+              setActiveReferenceIds((prev) =>
+                checked ? Array.from(new Set([...prev, assetId])) : prev.filter((item) => item !== assetId)
+              )
+            }
+          />
+          <VersionHistoryPanel
+            currentDraftId={currentDraftId}
+            versions={versions}
+            onRestoreVersion={handleRestoreVersion}
+          />
+        </div>
 
-                <div>
-                  <label className="mb-2 block text-sm font-medium">标题</label>
-                  <input
-                    type="text"
-                    value={formData.title}
-                    onChange={(event) => setFormData((prev) => ({ ...prev, title: event.target.value }))}
-                    className="w-full rounded-lg border px-3 py-2"
-                    placeholder="AI 会结合提纲为你建议标题"
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-sm font-medium">主送机关</label>
-                  <input
-                    type="text"
-                    value={formData.recipient}
-                    onChange={(event) => setFormData((prev) => ({ ...prev, recipient: event.target.value }))}
-                    list="recipient-list"
-                    className="w-full rounded-lg border px-3 py-2"
-                    placeholder="例如：各部门、各单位"
-                  />
-                  <button
-                    onClick={() => handleSavePhrase('recipient')}
-                    disabled={savingPhraseType === 'recipient'}
-                    className="mt-2 text-sm text-blue-600 hover:underline disabled:text-gray-400"
-                  >
-                    保存到常用信息
-                  </button>
-                  <datalist id="recipient-list">
-                    {phrases
-                      .filter((phrase) => phrase.type === 'recipient')
-                      .map((phrase) => (
-                        <option key={phrase.id} value={phrase.phrase} />
-                      ))}
-                  </datalist>
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-sm font-medium">需求描述</label>
-                  <textarea
-                    value={formData.content}
-                    onChange={(event) => setFormData((prev) => ({ ...prev, content: event.target.value }))}
-                    className="min-h-[180px] w-full rounded-lg border px-3 py-2"
-                    placeholder="先用自然语言写下你现在掌握的背景、目标、要点和要求，AI 会继续追问缺口。"
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-sm font-medium">发文机关</label>
-                  <input
-                    type="text"
-                    value={formData.issuer}
-                    onChange={(event) => setFormData((prev) => ({ ...prev, issuer: event.target.value }))}
-                    list="issuer-list"
-                    className="w-full rounded-lg border px-3 py-2"
-                    placeholder="例如：XX单位办公室"
-                  />
-                  <button
-                    onClick={() => handleSavePhrase('issuer')}
-                    disabled={savingPhraseType === 'issuer'}
-                    className="mt-2 text-sm text-blue-600 hover:underline disabled:text-gray-400"
-                  >
-                    保存到常用信息
-                  </button>
-                  <datalist id="issuer-list">
-                    {phrases
-                      .filter((phrase) => phrase.type === 'issuer')
-                      .map((phrase) => (
-                        <option key={phrase.id} value={phrase.phrase} />
-                      ))}
-                  </datalist>
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-sm font-medium">成文日期</label>
-                  <input
-                    type="date"
-                    value={formData.date}
-                    onChange={(event) => setFormData((prev) => ({ ...prev, date: event.target.value }))}
-                    className="w-full rounded-lg border px-3 py-2"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="mb-2 block text-sm font-medium">联系人</label>
-                    <input
-                      type="text"
-                      value={formData.contactName}
-                      onChange={(event) => {
-                        const name = event.target.value;
-                        setFormData((prev) => ({ ...prev, contactName: name }));
-                        handleSelectContact(name);
-                      }}
-                      list="contact-list"
-                      className="w-full rounded-lg border px-3 py-2"
-                    />
-                    <datalist id="contact-list">
-                      {contacts.map((contact) => (
-                        <option key={contact.id} value={contact.name} />
-                      ))}
-                    </datalist>
-                  </div>
-                  <div>
-                    <label className="mb-2 block text-sm font-medium">联系电话</label>
-                    <input
-                      type="text"
-                      value={formData.contactPhone}
-                      onChange={(event) => setFormData((prev) => ({ ...prev, contactPhone: event.target.value }))}
-                      className="w-full rounded-lg border px-3 py-2"
-                    />
-                  </div>
-                </div>
-                <button onClick={handleSaveContact} className="text-sm text-blue-600 hover:underline">
-                  保存为常用联系人
-                </button>
-
-                <div>
-                  <label className="mb-2 block text-sm font-medium">附件</label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={newAttachment}
-                      onChange={(event) => setNewAttachment(event.target.value)}
-                      onKeyDown={(event) => event.key === 'Enter' && handleAddAttachment()}
-                      className="flex-1 rounded-lg border px-3 py-2"
-                      placeholder="输入附件名称"
-                    />
-                    <button onClick={handleAddAttachment} className="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700">
-                      添加
-                    </button>
-                  </div>
-                  {attachments.length > 0 && (
-                    <div className="mt-3 space-y-2">
-                      {attachments.map((attachment, index) => (
-                        <div key={attachment + index} className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-sm">
-                          <span>
-                            {index + 1}. {attachment}
-                          </span>
-                          <button onClick={() => handleRemoveAttachment(index)} className="text-red-600 hover:underline">
-                            删除
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-2xl bg-white p-6 shadow-sm">
-              <h2 className="text-lg font-bold">AI 约束与参考</h2>
-              <div className="mt-4 space-y-4">
-                <div>
-                  <label className="mb-2 block text-sm font-medium">AI 提供商</label>
-                  <select
-                    value={provider}
-                    onChange={(event) => {
-                      const nextProvider = event.target.value as ProviderInfo['id'];
-                      setProvider(nextProvider);
-                      localStorage.setItem('lastUsedProvider', nextProvider);
-                    }}
-                    className="w-full rounded-lg border px-3 py-2"
-                    disabled={!providers.length}
-                  >
-                    {providers.map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {item.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="rounded-xl border border-gray-200 p-4">
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-medium">个人规则库</h3>
-                    <span className="text-xs text-gray-500">可多选</span>
-                  </div>
-                  <div className="mt-3 max-h-44 space-y-2 overflow-y-auto">
-                    {visibleRules.map((rule) => (
-                      <label key={rule.id} className="flex items-start gap-2 rounded-lg bg-gray-50 px-3 py-2 text-sm">
-                        <input
-                          type="checkbox"
-                          checked={activeRuleIds.includes(rule.id)}
-                          onChange={(event) =>
-                            setActiveRuleIds((prev) =>
-                              event.target.checked ? Array.from(new Set([...prev, rule.id])) : prev.filter((item) => item !== rule.id)
-                            )
-                          }
-                          className="mt-1"
-                        />
-                        <span>
-                          <strong>{rule.name}</strong>
-                          <span className="ml-2 text-xs text-gray-500">{rule.rule_type}</span>
-                          <span className="mt-1 block text-gray-600">{rule.content}</span>
-                        </span>
-                      </label>
-                    ))}
-                    {visibleRules.length === 0 && <div className="text-sm text-gray-400">还没有规则，下面可以立即新增。</div>}
-                  </div>
-                  <div className="mt-4 space-y-2 rounded-lg bg-blue-50 p-3">
-                    <input
-                      type="text"
-                      value={ruleForm.name}
-                      onChange={(event) => setRuleForm((prev) => ({ ...prev, name: event.target.value }))}
-                      className="w-full rounded-lg border px-3 py-2 text-sm"
-                      placeholder="规则名称，例如：请示结尾必须规范"
-                    />
-                    <div className="grid grid-cols-2 gap-2">
-                      <select
-                        value={ruleForm.ruleType}
-                        onChange={(event) => setRuleForm((prev) => ({ ...prev, ruleType: event.target.value as WritingRule['rule_type'] }))}
-                        className="rounded-lg border px-3 py-2 text-sm"
-                      >
-                        <option value="tone_rule">语气规则</option>
-                        <option value="structure_rule">结构规则</option>
-                        <option value="required_phrase">必备短语</option>
-                        <option value="forbidden_phrase">禁用短语</option>
-                        <option value="ending_rule">结尾规则</option>
-                        <option value="organization_fact">单位事实</option>
-                      </select>
-                      <select
-                        value={ruleForm.docType}
-                        onChange={(event) => setRuleForm((prev) => ({ ...prev, docType: event.target.value }))}
-                        className="rounded-lg border px-3 py-2 text-sm"
-                      >
-                        <option value="">适用于所有文种</option>
-                        {docTypes.map((type) => (
-                          <option key={type.id} value={type.id}>
-                            {type.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <textarea
-                      value={ruleForm.content}
-                      onChange={(event) => setRuleForm((prev) => ({ ...prev, content: event.target.value }))}
-                      className="min-h-[90px] w-full rounded-lg border px-3 py-2 text-sm"
-                      placeholder="例如：请示正文结尾必须使用“妥否，请批示”或同等规范表达。"
-                    />
-                    <button onClick={handleCreateRule} className="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700">
-                      添加规则
-                    </button>
-                  </div>
-                </div>
-
-                <div className="rounded-xl border border-gray-200 p-4">
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-medium">参考材料</h3>
-                    <select
-                      value={referenceUploadMode}
-                      onChange={(event) => setReferenceUploadMode(event.target.value as 'session' | 'library')}
-                      className="rounded-lg border px-3 py-2 text-sm"
-                    >
-                      <option value="session">仅当前写作使用</option>
-                      <option value="library">保存到个人参考库</option>
-                    </select>
-                  </div>
-                  <p className="mt-2 text-xs text-gray-500">上传后会先做风格分析，再用于提纲和正文生成。</p>
-                  <input
-                    type="file"
-                    accept=".docx,.pdf,.txt"
-                    onChange={handleReferenceUpload}
-                    className="mt-3 w-full rounded-lg border px-3 py-2 text-sm"
-                    disabled={uploadingReference}
-                  />
-                  {uploadingReference && <div className="mt-2 text-sm text-blue-600">参考材料处理中...</div>}
-                  {referenceAnalysisPreview && (
-                    <div className="mt-3 rounded-lg bg-blue-50 p-3 text-sm text-blue-900">
-                      <div>语气：{referenceAnalysisPreview.tone}</div>
-                      <div>结构：{referenceAnalysisPreview.structure}</div>
-                      <div>用词：{referenceAnalysisPreview.vocabulary}</div>
-                    </div>
-                  )}
-
-                  {sessionReferences.length > 0 && (
-                    <div className="mt-4">
-                      <div className="text-sm font-medium">当前会话参考</div>
-                      <div className="mt-2 space-y-2">
-                        {sessionReferences.map((item, index) => (
-                          <div key={item.fileName + index} className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-sm">
-                            <span>{item.name}</span>
-                            <button
-                              onClick={() => setSessionReferences((prev) => prev.filter((_, current) => current !== index))}
-                              className="text-red-600 hover:underline"
-                            >
-                              移除
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="mt-4 max-h-48 space-y-2 overflow-y-auto">
-                    {visibleAssets.map((asset) => (
-                      <label key={asset.id} className="flex items-start gap-2 rounded-lg bg-gray-50 px-3 py-2 text-sm">
-                        <input
-                          type="checkbox"
-                          checked={activeReferenceIds.includes(asset.id)}
-                          onChange={(event) =>
-                            setActiveReferenceIds((prev) =>
-                              event.target.checked ? Array.from(new Set([...prev, asset.id])) : prev.filter((item) => item !== asset.id)
-                            )
-                          }
-                          className="mt-1"
-                        />
-                        <span>
-                          <strong>{asset.name}</strong>
-                          {asset.is_favorite && <span className="ml-2 rounded bg-yellow-100 px-2 py-0.5 text-xs text-yellow-700">收藏</span>}
-                          <span className="mt-1 block text-gray-600">{asset.file_name}</span>
-                        </span>
-                      </label>
-                    ))}
-                    {visibleAssets.length === 0 && <div className="text-sm text-gray-400">还没有保存的参考材料。</div>}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-2xl bg-white p-6 shadow-sm">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-bold">版本历史</h2>
-                {currentDraftId && <span className="text-xs text-gray-500">{versions.length} 个快照</span>}
-              </div>
-              <div className="mt-4 max-h-[360px] space-y-3 overflow-y-auto">
-                {versions.map((version) => (
-                  <div key={version.id} className="rounded-xl border border-gray-200 p-3 text-sm">
-                    <div className="font-medium">{version.change_summary || version.stage}</div>
-                    <div className="mt-1 text-xs text-gray-500">{new Date(version.created_at).toLocaleString('zh-CN')}</div>
-                    <button onClick={() => handleRestoreVersion(version.id)} className="mt-3 text-blue-600 hover:underline">
-                      恢复到此版本
-                    </button>
-                  </div>
-                ))}
-                {currentDraftId && versions.length === 0 && <div className="text-sm text-gray-400">关键节点快照会显示在这里。</div>}
-                {!currentDraftId && <div className="text-sm text-gray-400">生成或保存草稿后会出现版本历史。</div>}
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-6">
+        <div className="space-y-6">
             <StageNavigation
               currentStep={currentStep}
               onChange={setCurrentStep}
