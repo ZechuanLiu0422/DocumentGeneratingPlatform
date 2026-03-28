@@ -71,7 +71,7 @@ Plans:
 Plans:
 - [x] 04-01-PLAN.md — Durable-operation contracts, migration, and provider-free harness foundation
 - [x] 04-02-PLAN.md — Distributed limiter, lease/idempotency coordination, and autonomous runner drain path
-- [ ] 04-03-PLAN.md — Async draft/revise route adoption plus status polling and telemetry
+- [x] 04-03-PLAN.md — Async draft/revise route adoption plus status polling and telemetry
 - [ ] 04-04-PLAN.md — Export artifact storage, binary download route, and browser export hardening
 
 ### Phase 5: Generate Workspace Decomposition
@@ -92,5 +92,5 @@ Plans:
 | 1. Workflow Integrity Guardrails | 4/4 | Complete | 2026-03-26 |
 | 2. Verification and Telemetry Baseline | 4/4 | Complete | 2026-03-27 |
 | 3. Grounded Drafting and Review Trust | 4/4 | Complete | 2026-03-27 |
-| 4. Durable Execution and Export Hardening | 2/4 | In progress | - |
+| 4. Durable Execution and Export Hardening | 3/4 | In progress | - |
 | 5. Generate Workspace Decomposition | 0/TBD | Not started | - |

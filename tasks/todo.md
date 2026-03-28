@@ -1,15 +1,29 @@
 # TODO
 
-- [ ] Execute Phase 04 Plan 03 Task 1 with TDD red-green flow
-- [ ] Verify Task 1 async draft/revise enqueue contract coverage and commit atomically
-- [ ] Execute Phase 04 Plan 03 Task 2 with TDD red-green flow
-- [ ] Verify Task 2 operation-status/polling/telemetry coverage and commit atomically
-- [ ] Run Phase 04 Plan 03 verification, create `04-03-SUMMARY.md`, and update planning state artifacts
-- [ ] Record Phase 04 Plan 03 execution review notes
+- [ ] Execute Phase 04 Plan 04 Task 1 with TDD red-green flow
+- [ ] Verify Task 1 export download and artifact contract coverage and commit atomically
+- [ ] Execute Phase 04 Plan 04 Task 2 with browser export polling/download updates
+- [ ] Verify Task 2 build and seeded browser export proof, then commit atomically
+- [ ] Run Phase 04 Plan 04 verification, create `04-04-SUMMARY.md`, and update planning state artifacts
+- [ ] Record Phase 04 Plan 04 execution review notes
+
+- [x] Execute Phase 04 Plan 03 Task 1 with TDD red-green flow
+- [x] Verify Task 1 async draft/revise enqueue contract coverage and commit atomically
+- [x] Execute Phase 04 Plan 03 Task 2 with TDD red-green flow
+- [x] Verify Task 2 operation-status/polling/telemetry coverage and commit atomically
+- [x] Run Phase 04 Plan 03 verification, create `04-03-SUMMARY.md`, and update planning state artifacts
+- [x] Record Phase 04 Plan 03 execution review notes
+
+## Phase 04 Plan 04 Execution Review
+
+- Pending
 
 ## Phase 04 Plan 03 Execution Review
 
-- Pending
+- Executed on 2026-03-28 with four TDD commits: red/green for durable async draft/revise enqueue contracts, then red/green for operation-status read models, telemetry, and client polling/resume wiring.
+- Verification evidence: `npm run test:phase-04:contracts:async`, `node --experimental-strip-types --test tests/phase-04/contracts/operation-status-route-contract.test.ts tests/phase-04/telemetry/operation-route-telemetry.test.ts`, and `npm run build`.
+- Outcome: `/api/ai/draft` and `/api/ai/revise` now return durable operation handles, `/api/operations/[id]` exposes lifecycle plus completed draft hydration, and `/generate` resumes queued draft/revise work after refresh through narrow localStorage-backed polling.
+- Execution note: Task 2 surfaced strict type-boundary gaps in operation insert defaults, session-reference analysis typing, and queue-drain result narrowing; those were corrected as part of the green implementation before the final build passed.
 
 - [x] Execute Phase 04 Plan 02 Task 1 with TDD red-green flow
 - [x] Verify Task 1 distributed limiter contract coverage and commit atomically

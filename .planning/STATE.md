@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Executing Phase 04
-stopped_at: Completed Phase 04 Plan 02 execution
-last_updated: "2026-03-28T04:38:25.000Z"
+stopped_at: Completed Phase 04 Plan 03 execution
+last_updated: "2026-03-28T04:59:28.000Z"
 progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 16
-  completed_plans: 14
+  completed_plans: 15
 ---
 
 # Project State
@@ -24,15 +24,15 @@ See: .planning/PROJECT.md (updated 2026-03-26)
 ## Current Position
 
 Phase: 04 (durable-execution-and-export-hardening) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 
 ## Performance Metrics
 
 **Execution Status:**
 
-- Total plans completed: 14
+- Total plans completed: 15
 - Completed phases: 01, 02, 03
-- Latest completed plan: `04-02`
+- Latest completed plan: `04-03`
 
 **By Phase:**
 
@@ -41,15 +41,16 @@ Plan: 3 of 4
 | 01 | 4/4 | Complete |
 | 02 | 4/4 | Complete |
 | 03 | 4/4 | Complete |
-| 04 | 2/4 | In Progress |
+| 04 | 3/4 | In Progress |
 
 **Recent Trend:**
 
-- Phase 04 now has persistent limiter windows, lease-aware operation coordination, and a protected runner entrypoint ready for async route adoption.
+- Phase 04 now has durable draft/revise operation handles, a browser-facing status read model, and refresh-safe polling on the existing generate workspace.
 - Trend: Stable
 
 | Phase 04 P01 | 9m | 2 tasks | 8 files |
 | Phase 04 P02 | 13m | 2 tasks | 11 files |
+| Phase 04 P03 | 10m | 2 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -76,8 +77,8 @@ Recent decisions affecting current work:
 
 ### Pending Todos
 
-- Execute Phase 04 Plan 03 to move draft/revise routes onto durable operation handles and add a status read model.
-- Decide whether to fix the known `/api/drafts` `docType` versus `doc_type` hydration mismatch before Phase 5, or explicitly defer it into the decomposition phase.
+- Execute Phase 04 Plan 04 to move export onto the durable operation backbone and replace base64 JSON delivery with binary download retrieval.
+- Run the seeded browser export proof after the durable export route and download endpoint land.
 
 ### Blockers/Concerns
 
@@ -86,6 +87,9 @@ Recent decisions affecting current work:
 
 ## Latest Completed Work
 
+- Completed Phase 04 Plan 03 on 2026-03-28.
+- Verified Phase 04 Plan 03 with `npm run test:phase-04:contracts:async`, `node --experimental-strip-types --test tests/phase-04/contracts/operation-status-route-contract.test.ts tests/phase-04/telemetry/operation-route-telemetry.test.ts`, and `npm run build`.
+- Added durable draft/revise enqueue contracts, the `/api/operations/[id]` status read model, lifecycle telemetry for operation status reads, and narrow refresh-safe polling/resume wiring on `/generate`.
 - Completed Phase 04 Plan 02 on 2026-03-28.
 - Verified Phase 04 Plan 02 with `node --experimental-strip-types --test tests/phase-04/ops/distributed-ratelimit.test.ts`, `npm run test:phase-04:ops:coordination`, and `npm run test:phase-04:ops`.
 - Added persistent rate-limit windows, lease-aware queue coordination, shared operation telemetry fields, and the protected `/api/operations/run` recovery path.
