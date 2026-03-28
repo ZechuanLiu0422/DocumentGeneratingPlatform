@@ -66,6 +66,21 @@
 - Verification evidence: `node --experimental-strip-types --experimental-test-module-mocks --test-concurrency=1 --test tests/phase-05/contracts/stage-module-contract.test.ts` and `npm run build`.
 - Outcome: `/generate` now renders intake, planning, and outline through isolated stage modules, early-stage route transitions live in `useGenerateWorkspaceController`, and the page no longer contains explicit intake/planning/outline step branches.
 
+## Phase 05 Plan 03 Execution Checklist
+
+- [x] Task 1 RED: add sidebar decomposition contract for draft/review/status extraction
+- [x] Task 1 implement: extract draft/review stages plus pending-change and operation-status surfaces
+- [x] Task 1 verify: `node --experimental-strip-types --experimental-test-module-mocks --test-concurrency=1 --test tests/phase-05/contracts/sidebar-decomposition-contract.test.ts`
+- [x] Task 1 commit: draft/review/status extraction
+- [ ] Task 2 implement: extract knowledge/version side panels and finish page composition cleanup
+- [ ] Task 2 verify: `node --experimental-strip-types --experimental-test-module-mocks --test-concurrency=1 --test tests/phase-05/contracts/*.test.ts`
+- [ ] Task 2 verify: `npm run build`
+- [ ] Task 2 verify: `npm run test:phase-02:rls:reset`
+- [ ] Task 2 verify: `npm run test:phase-02:e2e:seed`
+- [ ] Task 2 verify: `playwright test --config=playwright.config.ts --project=chromium tests/e2e/generate-smoke.spec.ts --grep "UX-01|UX-02|Phase 5"`
+- [ ] Task 2 commit: sidebar extraction and final phase verification wiring
+- [ ] Closeout: create `05-03-SUMMARY.md`, update planning state artifacts, and record Phase 5 execution review notes
+
 - [x] Execute Phase 04 Plan 04 Task 1 with TDD red-green flow
 - [x] Verify Task 1 export download and artifact contract coverage and commit atomically
 - [x] Execute Phase 04 Plan 04 Task 2 with browser export polling/download updates

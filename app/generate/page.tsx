@@ -2,10 +2,14 @@
 
 import { useEffect, useState } from 'react';
 import { GenerateWorkspaceShell } from '@/app/generate/_components/GenerateWorkspaceShell';
+import { OperationStatusBanner } from '@/app/generate/_components/OperationStatusBanner';
+import { PendingChangeBanner } from '@/app/generate/_components/PendingChangeBanner';
 import { StageNavigation } from '@/app/generate/_components/StageNavigation';
+import { DraftStage } from '@/app/generate/_components/stages/DraftStage';
 import { IntakeStage } from '@/app/generate/_components/stages/IntakeStage';
 import { OutlineStage } from '@/app/generate/_components/stages/OutlineStage';
 import { PlanningStage } from '@/app/generate/_components/stages/PlanningStage';
+import { ReviewStage } from '@/app/generate/_components/stages/ReviewStage';
 import { useGenerateWorkspaceBootstrap } from '@/app/generate/_hooks/useGenerateWorkspaceBootstrap';
 import { useGenerateWorkspaceController } from '@/app/generate/_hooks/useGenerateWorkspaceController';
 import {
@@ -227,12 +231,6 @@ function formatFactValue(value: string | string[]) {
   return Array.isArray(value) ? value.join('；') : value;
 }
 
-function statusClass(status: ReviewCheck['status']) {
-  if (status === 'pass') return 'bg-green-50 text-green-700 border-green-200';
-  if (status === 'warning') return 'bg-yellow-50 text-yellow-700 border-yellow-200';
-  return 'bg-red-50 text-red-700 border-red-200';
-}
-
 function mapWorkflowStageToStep(stage: WorkflowStage) {
   if (stage === 'review' || stage === 'done') return 'review';
   return stage;
@@ -370,22 +368,6 @@ function triggerBinaryDownload(downloadUrl: string, fileName = 'document.docx') 
   document.body.appendChild(anchor);
   anchor.click();
   document.body.removeChild(anchor);
-}
-
-function getPendingActionLabel(action: PendingChange['action']) {
-  if (action === 'regenerate') return '段落重生成';
-  if (action === 'revise') return '改写';
-  return '版本恢复';
-}
-
-function getPendingTargetLabel(targetType: PendingChange['targetType']) {
-  if (targetType === 'selection') return '选中文本';
-  if (targetType === 'section') return '指定段落';
-  return '整稿';
-}
-
-function findSectionById(sections: DraftSection[], sectionId: string) {
-  return sections.find((section) => section.id === sectionId) || null;
 }
 
 function renderSectionProvenance(section: DraftSection, emptyMessage = '当前段落还没有可展示的采纳依据。') {
@@ -1423,6 +1405,63 @@ function GeneratePageContent() {
         onUpdateOutlineKeyPoints={controller.updateOutlineKeyPoints}
       />
     ),
+    draft: (
+      <DraftStage
+        sections={sections}
+        selectedText={selectedText}
+        selectionInstruction={selectionInstruction}
+        fullInstruction={fullInstruction}
+        sectionInstructions={sectionInstructions}
+        busy={busy}
+        busyAction={busyAction}
+        onSelectionInstructionChange={setSelectionInstruction}
+        onFullInstructionChange={setFullInstruction}
+        onSectionInstructionChange={(sectionId, value) => setSectionInstructions((prev) => ({ ...prev, [sectionId]: value }))}
+        onSectionHeadingChange={(sectionId, value) =>
+          setSections((prev) => prev.map((section) => (section.id === sectionId ? { ...section, heading: value } : section)))
+        }
+        onSectionBodyChange={(sectionId, value) =>
+          setSections((prev) => prev.map((section) => (section.id === sectionId ? { ...section, body: value } : section)))
+        }
+        onReviseSelection={() => handleRevise('selection', '', selectionInstruction)}
+        onReviseFull={() => handleRevise('full', '', fullInstruction)}
+        onRegenerateDraft={handleRegenerateDraft}
+        onRunReview={handleRunReview}
+        onGenerateSection={(sectionId) => handleGenerateDraft('section', sectionId)}
+        onReviseSection={(sectionId) => handleRevise('section', sectionId, sectionInstructions[sectionId] || '')}
+        renderSectionProvenance={renderSectionProvenance}
+      />
+    ),
+    review: (
+      <ReviewStage
+        sections={sections}
+        reviewGateMessage={reviewGateMessage}
+        reviewState={reviewState}
+        reviewChecks={reviewChecks}
+        busy={busy}
+        busyAction={busyAction}
+        onRunReview={handleRunReview}
+        onRegenerateDraft={handleRegenerateDraft}
+        onDownload={handleDownload}
+        onFixCheck={(fixPrompt) => handleRevise('full', '', fixPrompt)}
+        renderSectionProvenance={renderSectionProvenance}
+      />
+    ),
+    done: (
+      <ReviewStage
+        sections={sections}
+        reviewGateMessage={reviewGateMessage}
+        reviewState={reviewState}
+        reviewChecks={reviewChecks}
+        busy={busy}
+        busyAction={busyAction}
+        onRunReview={handleRunReview}
+        onRegenerateDraft={handleRegenerateDraft}
+        onDownload={handleDownload}
+        onFixCheck={(fixPrompt) => handleRevise('full', '', fixPrompt)}
+        renderSectionProvenance={renderSectionProvenance}
+      />
+    ),
   } as const;
 
   const primaryStagePanel = primaryStagePanels[currentStep as keyof typeof primaryStagePanels];
@@ -1809,330 +1848,24 @@ function GeneratePageContent() {
             />
 
             {(activeOperation || operationNotice) && (
-              <section
-                data-testid="operation-status-banner"
-                className={`rounded-2xl border p-4 shadow-sm ${
-                  operationPending ? 'border-blue-200 bg-blue-50 text-blue-900' : 'border-gray-200 bg-gray-50 text-gray-700'
-                }`}
-              >
-                <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
-                  <div>
-                    <div className="text-sm font-semibold">{operationPending ? '后台任务处理中' : '后台任务状态'}</div>
-                    <div className="mt-1 text-sm">{operationNotice}</div>
-                  </div>
-                  {activeOperation && (
-                    <div className="text-xs font-medium">
-                      {formatOperationStatus(activeOperation.status)} / {activeOperation.operationId}
-                    </div>
-                  )}
-                </div>
-              </section>
+              <OperationStatusBanner
+                operationPending={operationPending}
+                operationNotice={operationNotice}
+                operationId={activeOperation?.operationId}
+                statusLabel={activeOperation ? formatOperationStatus(activeOperation.status) : null}
+              />
             )}
 
             {pendingChange && (
-              <section
-                aria-label="候选变更对比"
-                data-testid="pending-change-panel"
-                className="rounded-2xl border border-blue-200 bg-blue-50 p-6 shadow-sm"
-              >
-                <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                  <div>
-                    <div className="text-lg font-bold text-blue-950">待确认候选变更</div>
-                    <div className="mt-2 text-sm text-blue-900">
-                      {getPendingActionLabel(pendingChange.action)} / {getPendingTargetLabel(pendingChange.targetType)}
-                    </div>
-                    <div className="mt-2 text-sm text-blue-800">
-                      {pendingChange.diffSummary || '请先核对前后差异，再决定是否接受。'}
-                    </div>
-                    <div className="mt-3 flex flex-wrap gap-2 text-xs">
-                      <span className="rounded-full bg-white px-3 py-1 text-blue-800">
-                        变化段落 {pendingChange.changedSectionIds.length}
-                      </span>
-                      <span className="rounded-full bg-white px-3 py-1 text-blue-800">
-                        未变化段落 {pendingChange.unchangedSectionIds.length}
-                      </span>
-                      {pendingChange.targetSectionIds.length > 0 && (
-                        <span className="rounded-full bg-white px-3 py-1 text-blue-800">
-                          目标 {pendingChange.targetSectionIds.join('、')}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap gap-3">
-                    <button
-                      onClick={() => handlePendingChangeDecision('reject')}
-                      disabled={busy}
-                      className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:text-gray-400"
-                    >
-                      拒绝候选变更
-                    </button>
-                    <button
-                      onClick={() => handlePendingChangeDecision('accept')}
-                      disabled={busy}
-                      className="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700 disabled:bg-gray-400"
-                    >
-                      接受候选变更
-                    </button>
-                  </div>
-                </div>
-
-                {(pendingChange.before.title || pendingChange.after.title) &&
-                  pendingChange.before.title !== pendingChange.after.title && (
-                    <div className="mt-5 grid gap-4 xl:grid-cols-2">
-                      <div className="rounded-xl border border-white/80 bg-white p-4">
-                        <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">当前标题</div>
-                        <div className="mt-2 text-sm text-gray-800">{pendingChange.before.title || '未命名文稿'}</div>
-                      </div>
-                      <div className="rounded-xl border border-blue-200 bg-white p-4">
-                        <div className="text-xs font-semibold uppercase tracking-wide text-blue-700">候选标题</div>
-                        <div className="mt-2 text-sm text-gray-900">{pendingChange.after.title || '未命名文稿'}</div>
-                      </div>
-                    </div>
-                  )}
-
-                <div className="mt-5 space-y-4">
-                  {(pendingChange.changedSectionIds.length > 0
-                    ? pendingChange.changedSectionIds
-                    : ['__full__']
-                  ).map((sectionId) => {
-                    const beforeSection =
-                      sectionId === '__full__' ? null : findSectionById(pendingChange.before.sections, sectionId);
-                    const afterSection =
-                      sectionId === '__full__' ? null : findSectionById(pendingChange.after.sections, sectionId);
-
-                    return (
-                      <div key={sectionId} className="grid gap-4 xl:grid-cols-2">
-                        <div className="rounded-xl border border-white/80 bg-white p-4">
-                          <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">当前内容</div>
-                          {beforeSection && (
-                            <div className="mt-2 text-sm font-medium text-gray-900">
-                              {beforeSection.heading}
-                            </div>
-                          )}
-                          <div className="mt-2 whitespace-pre-wrap text-sm leading-7 text-gray-700">
-                            {beforeSection?.body || pendingChange.before.content || '当前内容为空'}
-                          </div>
-                        </div>
-                        <div className="rounded-xl border border-blue-200 bg-white p-4">
-                          <div className="text-xs font-semibold uppercase tracking-wide text-blue-700">候选内容</div>
-                          {afterSection && (
-                            <div className="mt-2 text-sm font-medium text-gray-900">
-                              {afterSection.heading}
-                            </div>
-                          )}
-                          <div className="mt-2 whitespace-pre-wrap text-sm leading-7 text-gray-900">
-                            {afterSection?.body || pendingChange.after.content || '候选内容为空'}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </section>
+              <PendingChangeBanner
+                pendingChange={pendingChange}
+                busy={busy}
+                onReject={() => handlePendingChangeDecision('reject')}
+                onAccept={() => handlePendingChangeDecision('accept')}
+              />
             )}
 
-            <div className="rounded-2xl bg-white p-6 shadow-sm">
-              {primaryStagePanel}
-
-              {currentStep === 'draft' && (
-                <div className="space-y-6">
-                  <div>
-                    <h2 className="text-lg font-bold">分段成文</h2>
-                    <p className="mt-1 text-sm text-gray-500">正文按段生成，后续优先做段落级改写，全文改写作为兜底。</p>
-                  </div>
-
-                  {sections.length === 0 ? (
-                    <div className="rounded-xl border border-dashed border-gray-300 p-8 text-center">
-                      <p className="text-sm text-gray-500">提纲已经准备好，现在可以生成正文。</p>
-                      <button onClick={handleRegenerateDraft} disabled={busy} className="mt-4 rounded-lg bg-blue-600 px-5 py-3 text-white hover:bg-blue-700 disabled:bg-gray-400">
-                        {busyAction === 'draft' ? '生成中...' : '按提纲生成正文'}
-                      </button>
-                    </div>
-                  ) : (
-                    <>
-                      {selectedText && (
-                        <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
-                          <div className="text-sm font-medium text-blue-900">已选中文本</div>
-                          <div className="mt-2 text-sm text-blue-800">{selectedText}</div>
-                          <div className="mt-3 flex gap-2">
-                            <input
-                              type="text"
-                              value={selectionInstruction}
-                              onChange={(event) => setSelectionInstruction(event.target.value)}
-                              className="flex-1 rounded-lg border px-3 py-2 text-sm"
-                              placeholder="例如：把这句话改得更凝练、更像请示语气"
-                            />
-                            <button
-                              onClick={() => handleRevise('selection', '', selectionInstruction)}
-                              disabled={busy || !selectionInstruction.trim()}
-                              className="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700 disabled:bg-gray-400"
-                            >
-                              改写选中内容
-                            </button>
-                          </div>
-                        </div>
-                      )}
-
-                      <div className="rounded-xl bg-gray-50 p-4">
-                        <div className="text-sm font-medium">整稿协作</div>
-                        <div className="mt-3 flex flex-col gap-3 xl:flex-row">
-                          <input
-                            type="text"
-                            value={fullInstruction}
-                            onChange={(event) => setFullInstruction(event.target.value)}
-                            className="flex-1 rounded-lg border px-3 py-2"
-                            placeholder="例如：整体语气再严肃一些，第二部分再补充执行要求"
-                          />
-                          <button
-                            onClick={() => handleRevise('full', '', fullInstruction)}
-                            disabled={busy || !fullInstruction.trim()}
-                            className="rounded-lg border border-blue-200 px-4 py-2 text-blue-700 hover:bg-blue-50 disabled:text-gray-400"
-                          >
-                            AI 修改整稿
-                          </button>
-                          <button
-                            onClick={handleRegenerateDraft}
-                            disabled={busy}
-                            className="rounded-lg border border-amber-200 px-4 py-2 text-amber-700 hover:bg-amber-50 disabled:text-gray-400"
-                          >
-                            {busyAction === 'draft' ? '重新生成中...' : '重新生成正文'}
-                          </button>
-                          <button onClick={handleRunReview} disabled={busy} className="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:bg-gray-400">
-                            去做定稿检查
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="space-y-4">
-                        {sections.map((section) => (
-                          <div key={section.id} className="rounded-xl border border-gray-200 p-4">
-                            <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
-                              <input
-                                type="text"
-                                value={section.heading}
-                                onChange={(event) =>
-                                  setSections((prev) =>
-                                    prev.map((item) => (item.id === section.id ? { ...item, heading: event.target.value } : item))
-                                  )
-                                }
-                                className="rounded-lg border px-3 py-2 xl:w-64"
-                              />
-                              <button
-                                onClick={() => handleGenerateDraft('section', section.id)}
-                                disabled={busy}
-                                className="rounded-lg border border-gray-200 px-4 py-2 text-sm hover:bg-gray-50"
-                              >
-                                AI 重写本段
-                              </button>
-                            </div>
-                            <textarea
-                              value={section.body}
-                              onChange={(event) =>
-                                setSections((prev) =>
-                                  prev.map((item) => (item.id === section.id ? { ...item, body: event.target.value } : item))
-                                )
-                              }
-                              className="mt-3 min-h-[180px] w-full rounded-lg border px-3 py-2"
-                            />
-                            <div className="mt-3 flex flex-col gap-3 xl:flex-row">
-                              <input
-                                type="text"
-                                value={sectionInstructions[section.id] || ''}
-                                onChange={(event) => setSectionInstructions((prev) => ({ ...prev, [section.id]: event.target.value }))}
-                                className="flex-1 rounded-lg border px-3 py-2"
-                                placeholder="例如：这一段再扩写实施步骤，或改得更像通知口径"
-                              />
-                              <button
-                                onClick={() => handleRevise('section', section.id, sectionInstructions[section.id] || '')}
-                                disabled={busy || !(sectionInstructions[section.id] || '').trim()}
-                                className="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:bg-gray-400"
-                              >
-                                AI 修改本段
-                              </button>
-                            </div>
-                            {renderSectionProvenance(section)}
-                          </div>
-                        ))}
-                      </div>
-                    </>
-                  )}
-                </div>
-              )}
-
-              {currentStep === 'review' && (
-                <div className="space-y-6">
-                  <div>
-                    <h2 className="text-lg font-bold">定稿检查</h2>
-                    <p className="mt-1 text-sm text-gray-500">先检查规范性，再决定是否一键修复或直接导出。</p>
-                  </div>
-
-                  <div className="flex flex-wrap gap-3">
-                    <button onClick={handleRunReview} disabled={busy || sections.length === 0} className="rounded-lg bg-blue-600 px-5 py-3 text-white hover:bg-blue-700 disabled:bg-gray-400">
-                      {busyAction === 'review' ? '检查中...' : '重新运行定稿检查'}
-                    </button>
-                    <button onClick={handleRegenerateDraft} disabled={busy || sections.length === 0} className="rounded-lg border border-amber-200 px-5 py-3 text-amber-700 hover:bg-amber-50 disabled:text-gray-400">
-                      {busyAction === 'draft' ? '重新生成中...' : '重新生成正文'}
-                    </button>
-                    <button onClick={handleDownload} disabled={busy || sections.length === 0} className="rounded-lg bg-green-600 px-5 py-3 text-white hover:bg-green-700 disabled:bg-gray-400">
-                      {busyAction === 'download' ? '导出中...' : '下载 Word 定稿'}
-                    </button>
-                  </div>
-
-                  {(reviewGateMessage || reviewState) && (
-                    <div
-                      className={`rounded-xl border px-4 py-3 text-sm ${
-                        reviewState?.status === 'pass'
-                          ? 'border-green-200 bg-green-50 text-green-700'
-                          : 'border-amber-200 bg-amber-50 text-amber-800'
-                      }`}
-                    >
-                      {reviewGateMessage || `最近一次定稿检查结果：${reviewState?.status === 'pass' ? '通过' : reviewState?.status === 'warning' ? '有提醒' : '未通过'}。`}
-                    </div>
-                  )}
-
-                  <div className="space-y-3">
-                    {reviewChecks.length > 0 ? (
-                      reviewChecks.map((check) => (
-                        <div key={check.code} className={`rounded-xl border p-4 ${statusClass(check.status)}`}>
-                          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-                            <div>
-                              <div className="text-xs uppercase tracking-wide opacity-70">{check.code}</div>
-                              <div className="mt-1 font-medium">{check.message}</div>
-                            </div>
-                            {check.fixPrompt && (
-                              <button
-                                onClick={() => handleRevise('full', '', check.fixPrompt)}
-                                disabled={busy}
-                                className="rounded-lg border border-current px-4 py-2 text-sm"
-                              >
-                                一键修复
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="rounded-xl border border-dashed border-gray-300 p-8 text-center text-sm text-gray-500">
-                        先运行一次定稿检查，AI 会列出风险项和一键修复建议。
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="rounded-xl border border-gray-200 p-4">
-                    <div className="text-sm font-medium">已采纳依据</div>
-                    <div className="mt-3 space-y-4">
-                      {sections.map((section) => (
-                        <div key={`review-provenance-${section.id}`}>
-                          <div className="text-sm font-medium text-gray-900">{section.heading}</div>
-                          {renderSectionProvenance(section, '本段当前没有可展示的采纳依据。')}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
+            <div className="rounded-2xl bg-white p-6 shadow-sm">{primaryStagePanel}</div>
 
             <div className="rounded-2xl bg-white p-6 shadow-sm">
               <div className="flex items-center justify-between">
